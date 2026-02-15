@@ -13,4 +13,5 @@ pub mod parity;
 pub mod pathfinder;
 pub mod pot;
 pub mod rdinp;
+pub mod workflow;
 pub mod xsph;

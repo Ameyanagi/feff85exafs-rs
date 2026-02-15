@@ -5,6 +5,7 @@ use crate::baseline::{generate_noscf_manifests_for_mode, generate_withscf_manife
 use crate::benchmark::{BenchmarkReport, BenchmarkReportRequest, generate_benchmark_report};
 use crate::domain::RunMode;
 use crate::parity::{ParityReport, ParityReportRequest, generate_parity_report};
+use crate::workflow::{run_legacy_workflow, run_modern_workflow};
 use feff85exafs_errors::{FeffError, Result, ValidationErrors};
 use serde::{Deserialize, Serialize};
 
@@ -24,9 +25,18 @@ pub struct BaselineRunRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkflowRunRequest {
+    pub input_path: String,
+    pub working_root: String,
+    #[serde(default)]
+    pub legacy_runner: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RunOperation {
     Baseline(BaselineRunRequest),
+    Workflow(WorkflowRunRequest),
     ParityReport(ParityReportRequest),
     BenchmarkReport(BenchmarkReportRequest),
 }
@@ -53,10 +63,22 @@ pub struct BaselineRunSuccess {
     pub manifest_paths: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkflowRunSuccess {
+    pub input_path: String,
+    pub working_root: String,
+    pub chi_dat: String,
+    pub xmu_dat: String,
+    pub sig2_dat: Option<String>,
+    pub exchange_dat: Option<String>,
+    pub fovrg_dat: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RunOperationSuccess {
     Baseline(BaselineRunSuccess),
+    Workflow(WorkflowRunSuccess),
     ParityReport(ParityReport),
     BenchmarkReport(BenchmarkReport),
 }
@@ -72,6 +94,10 @@ impl RunSuccess {
         self.result.baseline()
     }
 
+    pub fn workflow(&self) -> Option<&WorkflowRunSuccess> {
+        self.result.workflow()
+    }
+
     pub fn parity_report(&self) -> Option<&ParityReport> {
         self.result.parity_report()
     }
@@ -85,21 +111,28 @@ impl RunOperationSuccess {
     pub fn baseline(&self) -> Option<&BaselineRunSuccess> {
         match self {
             Self::Baseline(result) => Some(result),
-            Self::ParityReport(_) | Self::BenchmarkReport(_) => None,
+            Self::Workflow(_) | Self::ParityReport(_) | Self::BenchmarkReport(_) => None,
+        }
+    }
+
+    pub fn workflow(&self) -> Option<&WorkflowRunSuccess> {
+        match self {
+            Self::Workflow(result) => Some(result),
+            Self::Baseline(_) | Self::ParityReport(_) | Self::BenchmarkReport(_) => None,
         }
     }
 
     pub fn parity_report(&self) -> Option<&ParityReport> {
         match self {
             Self::ParityReport(result) => Some(result),
-            Self::Baseline(_) | Self::BenchmarkReport(_) => None,
+            Self::Baseline(_) | Self::Workflow(_) | Self::BenchmarkReport(_) => None,
         }
     }
 
     pub fn benchmark_report(&self) -> Option<&BenchmarkReport> {
         match self {
             Self::BenchmarkReport(result) => Some(result),
-            Self::Baseline(_) | Self::ParityReport(_) => None,
+            Self::Baseline(_) | Self::Workflow(_) | Self::ParityReport(_) => None,
         }
     }
 }
@@ -125,6 +158,31 @@ impl RunRequest {
                     "operation.baseline.version",
                     &mut errors,
                 );
+            }
+            RunOperation::Workflow(operation) => {
+                validate_non_empty(
+                    &operation.input_path,
+                    "operation.workflow.input_path",
+                    &mut errors,
+                );
+                validate_non_empty(
+                    &operation.working_root,
+                    "operation.workflow.working_root",
+                    &mut errors,
+                );
+                if self.mode == RunMode::Legacy {
+                    match operation.legacy_runner.as_deref() {
+                        Some(value) => validate_non_empty(
+                            value,
+                            "operation.workflow.legacy_runner",
+                            &mut errors,
+                        ),
+                        None => errors.push(
+                            "operation.workflow.legacy_runner",
+                            "must be provided when mode is `legacy`",
+                        ),
+                    }
+                }
             }
             RunOperation::ParityReport(operation) => {
                 validate_non_empty(
@@ -237,6 +295,9 @@ fn execute(request: RunRequest) -> Result<RunSuccess> {
         RunOperation::Baseline(operation) => {
             RunOperationSuccess::Baseline(run_baseline_operation(&operation, request.mode)?)
         }
+        RunOperation::Workflow(operation) => {
+            RunOperationSuccess::Workflow(run_workflow_operation(&operation, request.mode)?)
+        }
         RunOperation::ParityReport(operation) => {
             RunOperationSuccess::ParityReport(run_parity_report_operation(&operation)?)
         }
@@ -305,6 +366,56 @@ fn run_baseline_operation(
     })
 }
 
+fn run_workflow_operation(
+    operation: &WorkflowRunRequest,
+    mode: RunMode,
+) -> Result<WorkflowRunSuccess> {
+    match mode {
+        RunMode::Modern => {
+            let output = run_modern_workflow(
+                Path::new(&operation.input_path),
+                Path::new(&operation.working_root),
+            )?;
+
+            Ok(WorkflowRunSuccess {
+                input_path: operation.input_path.clone(),
+                working_root: operation.working_root.clone(),
+                chi_dat: output.ff2x_output.chi_dat,
+                xmu_dat: output.ff2x_output.xmu_dat,
+                sig2_dat: Some(output.debye_output.sig2_dat),
+                exchange_dat: Some(output.exch_output.exchange_dat),
+                fovrg_dat: Some(output.fovrg_output.fovrg_dat),
+            })
+        }
+        RunMode::Legacy => {
+            let legacy_runner = operation.legacy_runner.as_deref().ok_or_else(|| {
+                let mut errors = ValidationErrors::new();
+                errors.push(
+                    "operation.workflow.legacy_runner",
+                    "must be provided when mode is `legacy`",
+                );
+                FeffError::Validation(errors)
+            })?;
+
+            let output = run_legacy_workflow(
+                Path::new(&operation.input_path),
+                Path::new(&operation.working_root),
+                legacy_runner,
+            )?;
+
+            Ok(WorkflowRunSuccess {
+                input_path: operation.input_path.clone(),
+                working_root: operation.working_root.clone(),
+                chi_dat: output.chi_dat,
+                xmu_dat: output.xmu_dat,
+                sig2_dat: None,
+                exchange_dat: None,
+                fovrg_dat: None,
+            })
+        }
+    }
+}
+
 fn run_parity_report_operation(operation: &ParityReportRequest) -> Result<ParityReport> {
     generate_parity_report(operation)
 }
@@ -360,6 +471,13 @@ mod tests {
 
     fn parity_fixture_root() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../feff85exafs/tests")
+    }
+
+    fn workflow_fixture_input() -> String {
+        parity_fixture_root()
+            .join("Copper/baseline/noSCF/feff.inp")
+            .to_string_lossy()
+            .into_owned()
     }
 
     #[test]
@@ -477,6 +595,48 @@ mod tests {
     }
 
     #[test]
+    fn run_returns_structured_workflow_success_in_modern_mode() {
+        let temp_root = temp_output_root();
+        let request = RunRequest {
+            mode: RunMode::Modern,
+            operation: RunOperation::Workflow(WorkflowRunRequest {
+                input_path: workflow_fixture_input(),
+                working_root: path_string(&temp_root.join("workflow")),
+                legacy_runner: None,
+            }),
+        };
+
+        let result = run(request).expect("modern workflow run should succeed");
+        let workflow = result
+            .workflow()
+            .expect("workflow run result should be present");
+        assert!(Path::new(&workflow.chi_dat).is_file());
+        assert!(Path::new(&workflow.xmu_dat).is_file());
+        assert!(
+            workflow
+                .sig2_dat
+                .as_deref()
+                .is_some_and(|path| Path::new(path).is_file())
+        );
+        assert!(
+            workflow
+                .exchange_dat
+                .as_deref()
+                .is_some_and(|path| Path::new(path).is_file())
+        );
+        assert!(
+            workflow
+                .fovrg_dat
+                .as_deref()
+                .is_some_and(|path| Path::new(path).is_file())
+        );
+
+        if temp_root.exists() {
+            fs::remove_dir_all(&temp_root).expect("should clean temporary output directory");
+        }
+    }
+
+    #[test]
     fn run_returns_validation_error_for_blank_request_fields() {
         let err = run(RunRequest {
             mode: RunMode::Modern,
@@ -556,6 +716,87 @@ mod tests {
                 assert!(fields.contains(&"operation.benchmark_report.iterations"));
             }
             other => panic!("unexpected error type: {other}"),
+        }
+    }
+
+    #[test]
+    fn run_returns_validation_error_for_missing_legacy_runner_in_legacy_workflow_mode() {
+        let err = run(RunRequest {
+            mode: RunMode::Legacy,
+            operation: RunOperation::Workflow(WorkflowRunRequest {
+                input_path: workflow_fixture_input(),
+                working_root: path_string(&temp_output_root().join("workflow-legacy")),
+                legacy_runner: None,
+            }),
+        })
+        .expect_err("legacy workflow mode should require explicit legacy runner");
+
+        match err {
+            FeffError::Validation(validation) => {
+                let fields = validation
+                    .issues()
+                    .iter()
+                    .map(|issue| issue.field.as_str())
+                    .collect::<Vec<_>>();
+                assert!(fields.contains(&"operation.workflow.legacy_runner"));
+            }
+            other => panic!("unexpected error type: {other}"),
+        }
+    }
+
+    #[cfg(unix)]
+    mod unix {
+        use super::*;
+        use std::fs::File;
+        use std::io::{self, Write};
+        use std::os::unix::fs::PermissionsExt;
+
+        fn write_executable(path: &Path, content: &str) -> io::Result<()> {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+
+            let mut file = File::create(path)?;
+            file.write_all(content.as_bytes())?;
+
+            let mut permissions = fs::metadata(path)?.permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(path, permissions)?;
+            Ok(())
+        }
+
+        #[test]
+        fn run_returns_structured_workflow_success_in_legacy_mode() {
+            let temp_root = temp_output_root();
+            let legacy_runner = temp_root.join("fake-legacy-runner.sh");
+            write_executable(
+                &legacy_runner,
+                "#!/bin/sh\nset -eu\nprintf '0.0 0.0\\n' > chi.dat\nprintf '0.0 0.0\\n' > xmu.dat\n",
+            )
+            .expect("fake legacy runner should be created");
+
+            let request = RunRequest {
+                mode: RunMode::Legacy,
+                operation: RunOperation::Workflow(WorkflowRunRequest {
+                    input_path: workflow_fixture_input(),
+                    working_root: path_string(&temp_root.join("workflow-legacy")),
+                    legacy_runner: Some(path_string(&legacy_runner)),
+                }),
+            };
+
+            let result = run(request).expect("legacy workflow run should succeed");
+            let workflow = result
+                .workflow()
+                .expect("workflow run result should be present");
+            assert!(Path::new(&workflow.chi_dat).is_file());
+            assert!(Path::new(&workflow.xmu_dat).is_file());
+            assert!(workflow.sig2_dat.is_none());
+            assert!(workflow.exchange_dat.is_none());
+            assert!(workflow.fovrg_dat.is_none());
+
+            if temp_root.exists() {
+                fs::remove_dir_all(&temp_root).expect("should clean temporary output directory");
+            }
         }
     }
 }

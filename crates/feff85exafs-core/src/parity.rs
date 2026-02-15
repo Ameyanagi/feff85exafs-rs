@@ -1,12 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::ff2x::{Ff2xInputData, run_ff2x};
-use crate::genfmt::{GenfmtInputData, run_genfmt};
-use crate::pathfinder::{PathfinderInputData, run_pathfinder};
-use crate::pot::{PotInputData, run_pot};
-use crate::rdinp::parse_rdinp;
-use crate::xsph::{XsphInputData, run_xsph};
+use crate::workflow::run_modern_workflow;
 use feff85exafs_errors::{FeffError, Result, ValidationErrors};
 use serde::{Deserialize, Serialize};
 
@@ -186,37 +181,7 @@ fn run_full_core_chain(
     input_path: &Path,
     working_root: &Path,
 ) -> Result<crate::ff2x::Ff2xOutputData> {
-    let parsed = parse_rdinp(input_path)?;
-    let pot_input = PotInputData::from_parsed_cards(&parsed)?;
-
-    let pot_working_dir = working_root.join("pot");
-    let xsph_working_dir = working_root.join("xsph");
-    let path_working_dir = working_root.join("pathfinder");
-    let genfmt_working_dir = working_root.join("genfmt");
-    let ff2x_working_dir = working_root.join("ff2x");
-
-    let pot_output = run_pot(&pot_input, &pot_working_dir)?;
-    let xsph_input = XsphInputData::from_pot_stage(&pot_input, &pot_output)?;
-    let xsph_output = run_xsph(&xsph_input, &xsph_working_dir)?;
-    let pathfinder_input = PathfinderInputData::from_previous_stages(
-        &pot_input,
-        &pot_output,
-        &xsph_input,
-        &xsph_output,
-    )?;
-    let pathfinder_output = run_pathfinder(&pathfinder_input, &path_working_dir)?;
-    let genfmt_input = GenfmtInputData::from_previous_stages(
-        &pot_input,
-        &pot_output,
-        &xsph_input,
-        &xsph_output,
-        &pathfinder_input,
-        &pathfinder_output,
-    )?;
-    let genfmt_output = run_genfmt(&genfmt_input, &genfmt_working_dir)?;
-    let ff2x_input = Ff2xInputData::from_previous_stages(&genfmt_input, &genfmt_output)?;
-
-    run_ff2x(&ff2x_input, &ff2x_working_dir)
+    Ok(run_modern_workflow(input_path, working_root)?.ff2x_output)
 }
 
 fn summarize_numeric_delta(

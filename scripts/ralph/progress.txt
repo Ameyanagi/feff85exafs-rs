@@ -27,6 +27,7 @@
 - Test temp directories should include an atomic suffix in addition to timestamp/PID to avoid collisions when `cargo test --workspace` runs tests in parallel.
 - Parity regression gating should use `cargo run -- parity report` with paired thresholds (`--max-abs-delta` + `--max-rms-delta`) and optional allowlists keyed by `<material>/<variant>/<file>` IDs.
 - Benchmark runs should isolate each case/iteration into a dedicated working directory before execution so stale stage artifacts do not skew timing or legacy-vs-modern comparisons.
+- Keep end-to-end stage wiring centralized in `crates/feff85exafs-core/src/workflow.rs`; CLI/API/report flows should call shared workflow runners instead of duplicating stage orchestration code.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -334,4 +335,18 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - In SCF fixtures, `files.dat` `Mu=` can differ from legacy `mu_old`, so treating `Mu` as a direct substitute for `mu_old` causes false parity regressions.
   - Useful context (e.g., "the evaluation panel is in component X")
     - `FovrgInputData::from_previous_stages(...)` currently expects the GENFMT directory to contain `files.dat` and `feffNNNN.dat` artifacts, and it uses optional `f85e.log` only for legacy `mu_old` compatibility seeding.
+---
+## 2026-02-16 06:36:25 JST - US-025
+- Added a shared full-workflow orchestration module in `crates/feff85exafs-core/src/workflow.rs` that runs modern native stages end-to-end (`rdinp -> pot -> xsph -> pathfinder -> genfmt -> ff2x -> debye -> exch -> fovrg`) and also supports explicit legacy execution via a provided legacy runner.
+- Extended typed API operations with `RunOperation::Workflow` and `WorkflowRunRequest`/`WorkflowRunSuccess` so modern runs no longer require legacy binaries while legacy mode remains available only when `mode=legacy` with an explicit runner.
+- Added CLI support for `cargo run -- workflow run` with `--mode`, `--input`, `--working-root`, and optional `--legacy-runner` flags, and refactored parity/benchmark modern execution paths to call the shared workflow orchestrator.
+- Added test coverage for modern and legacy workflow execution paths in core API/CLI/workflow modules.
+- Files changed: `crates/feff85exafs-core/src/workflow.rs`, `crates/feff85exafs-core/src/lib.rs`, `crates/feff85exafs-core/src/api.rs`, `crates/feff85exafs-core/src/parity.rs`, `crates/feff85exafs-core/src/benchmark.rs`, `src/main.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Centralize full stage orchestration in `workflow.rs` and consume it from API/CLI/report tools to keep modern execution behavior consistent across commands.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Legacy workflow mode should validate `legacy_runner` at request-validation time; relying only on runtime command errors makes API behavior inconsistent.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Modern workflow runs now emit non-core artifacts (`sig2.dat`, `exchange.dat`, `fovrg.dat`) in addition to core outputs (`chi.dat`, `xmu.dat`) under the selected working root.
 ---

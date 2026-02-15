@@ -5,7 +5,8 @@ use std::path::PathBuf;
 use std::process;
 
 use feff85exafs_core::api::{
-    BaselineCorpusVariant, BaselineRunRequest, RunOperation, RunRequest, run as run_modern_api,
+    BaselineCorpusVariant, BaselineRunRequest, RunOperation, RunRequest, WorkflowRunRequest,
+    run as run_modern_api,
 };
 use feff85exafs_core::benchmark::{BenchmarkReport, BenchmarkReportRequest};
 use feff85exafs_core::domain::RunMode;
@@ -17,6 +18,7 @@ use feff85exafs_errors::{FeffError, Result};
 #[derive(Debug, Clone)]
 enum CliCommand {
     Baseline(BaselineCommand),
+    WorkflowRun(WorkflowRunCommand),
     ParityReport(ParityReportCommand),
     BenchmarkReport(BenchmarkReportCommand),
 }
@@ -34,6 +36,14 @@ struct BaselineCommand {
     tests_root: PathBuf,
     output_root: PathBuf,
     version: String,
+}
+
+#[derive(Debug, Clone)]
+struct WorkflowRunCommand {
+    mode: RunMode,
+    input_path: PathBuf,
+    working_root: PathBuf,
+    legacy_runner: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -129,6 +139,7 @@ fn run_cli(args: Vec<String>) -> Result<()> {
     let command = parse_command(&args)?;
     match command {
         CliCommand::Baseline(command) => run_baseline_command(command),
+        CliCommand::WorkflowRun(command) => run_workflow_run_command(command),
         CliCommand::ParityReport(command) => run_parity_report_command(command),
         CliCommand::BenchmarkReport(command) => run_benchmark_report_command(command),
     }
@@ -170,6 +181,64 @@ fn run_baseline_command(command: BaselineCommand) -> Result<()> {
     for manifest in &summary.manifest_paths {
         println!("  {manifest}");
     }
+    Ok(())
+}
+
+fn run_workflow_run_command(command: WorkflowRunCommand) -> Result<()> {
+    let default_legacy_runner = PathBuf::from("feff85exafs/bin/f85e");
+    let legacy_runner = match command.mode {
+        RunMode::Legacy => Some(
+            command
+                .legacy_runner
+                .clone()
+                .unwrap_or(default_legacy_runner)
+                .to_string_lossy()
+                .into_owned(),
+        ),
+        RunMode::Modern => command
+            .legacy_runner
+            .as_ref()
+            .map(|path| path.to_string_lossy().into_owned()),
+    };
+
+    let request = RunRequest {
+        mode: command.mode,
+        operation: RunOperation::Workflow(WorkflowRunRequest {
+            input_path: command.input_path.to_string_lossy().into_owned(),
+            working_root: command.working_root.to_string_lossy().into_owned(),
+            legacy_runner,
+        }),
+    };
+
+    let run_result = run_modern_api(request)?;
+    let summary = run_result
+        .workflow()
+        .expect("workflow command should always return workflow success");
+
+    println!("Using run mode: {}", run_mode_value(command.mode));
+    if command.mode == RunMode::Legacy {
+        let legacy_order = legacy_stage_order()
+            .iter()
+            .map(|stage| legacy_stage_name(*stage))
+            .collect::<Vec<_>>()
+            .join(" -> ");
+        println!("Legacy stage order: {legacy_order}");
+    }
+    println!("Input: {}", summary.input_path);
+    println!("Working root: {}", summary.working_root);
+    println!("Artifacts:");
+    println!("  {}", summary.chi_dat);
+    println!("  {}", summary.xmu_dat);
+    if let Some(sig2_dat) = &summary.sig2_dat {
+        println!("  {sig2_dat}");
+    }
+    if let Some(exchange_dat) = &summary.exchange_dat {
+        println!("  {exchange_dat}");
+    }
+    if let Some(fovrg_dat) = &summary.fovrg_dat {
+        println!("  {fovrg_dat}");
+    }
+
     Ok(())
 }
 
@@ -262,15 +331,16 @@ fn run_benchmark_report_command(command: BenchmarkReportCommand) -> Result<()> {
 fn parse_command(args: &[String]) -> Result<CliCommand> {
     match args.first().map(String::as_str) {
         Some("baseline") => Ok(CliCommand::Baseline(parse_baseline_command(args)?)),
+        Some("workflow") => Ok(CliCommand::WorkflowRun(parse_workflow_run_command(args)?)),
         Some("parity") => Ok(CliCommand::ParityReport(parse_parity_report_command(args)?)),
         Some("benchmark") => Ok(CliCommand::BenchmarkReport(parse_benchmark_report_command(
             args,
         )?)),
         Some(other) => Err(FeffError::InvalidArgument(format!(
-            "unsupported command `{other}` (expected `baseline`, `parity report`, or `benchmark report`)"
+            "unsupported command `{other}` (expected `baseline`, `workflow run`, `parity report`, or `benchmark report`)"
         ))),
         None => Err(FeffError::InvalidArgument(
-            "missing command (expected `baseline`, `parity report`, or `benchmark report`)"
+            "missing command (expected `baseline`, `workflow run`, `parity report`, or `benchmark report`)"
                 .to_string(),
         )),
     }
@@ -356,6 +426,69 @@ fn parse_baseline_command(args: &[String]) -> Result<BaselineCommand> {
         tests_root,
         output_root,
         version,
+    })
+}
+
+fn parse_workflow_run_command(args: &[String]) -> Result<WorkflowRunCommand> {
+    if args.first().map(String::as_str) != Some("workflow")
+        || args.get(1).map(String::as_str) != Some("run")
+    {
+        return Err(FeffError::InvalidArgument(
+            "workflow command must be `workflow run`".to_string(),
+        ));
+    }
+
+    let mut mode_arg: Option<&str> = None;
+    let mut input_path = PathBuf::from("feff.inp");
+    let mut working_root = PathBuf::from("target/workflow-run");
+    let mut legacy_runner: Option<PathBuf> = None;
+
+    let mut idx = 2;
+    while idx < args.len() {
+        match args[idx].as_str() {
+            "--mode" => {
+                idx += 1;
+                let value = args
+                    .get(idx)
+                    .ok_or_else(|| missing_option_value_error("--mode"))?;
+                mode_arg = Some(value.as_str());
+            }
+            "--input" => {
+                idx += 1;
+                let value = args
+                    .get(idx)
+                    .ok_or_else(|| missing_option_value_error("--input"))?;
+                input_path = PathBuf::from(value);
+            }
+            "--working-root" => {
+                idx += 1;
+                let value = args
+                    .get(idx)
+                    .ok_or_else(|| missing_option_value_error("--working-root"))?;
+                working_root = PathBuf::from(value);
+            }
+            "--legacy-runner" => {
+                idx += 1;
+                let value = args
+                    .get(idx)
+                    .ok_or_else(|| missing_option_value_error("--legacy-runner"))?;
+                legacy_runner = Some(PathBuf::from(value));
+            }
+            unknown => {
+                return Err(FeffError::InvalidArgument(format!(
+                    "unknown argument `{unknown}`"
+                )));
+            }
+        }
+        idx += 1;
+    }
+
+    let mode = parse_run_mode_or_default(mode_arg)?;
+    Ok(WorkflowRunCommand {
+        mode,
+        input_path,
+        working_root,
+        legacy_runner,
     })
 }
 
@@ -697,6 +830,9 @@ fn print_usage() {
         "  cargo run -- baseline <noscf|scf> [--mode <legacy|modern>] [--tests-root PATH] [--output-root PATH] [--version VERSION]"
     );
     eprintln!(
+        "  cargo run -- workflow run [--mode <legacy|modern>] [--input PATH] [--working-root PATH] [--legacy-runner PATH]"
+    );
+    eprintln!(
         "  cargo run -- parity report [--tests-root PATH] [--working-root PATH] [--max-abs-delta FLOAT --max-rms-delta FLOAT] [--allow-regression ID ...] [--allow-regression-file PATH ...]"
     );
     eprintln!(
@@ -711,6 +847,12 @@ fn print_usage() {
     eprintln!("  --tests-root  feff85exafs/tests");
     eprintln!("  --output-root docs/migration/baselines");
     eprintln!("  --version     v1");
+    eprintln!();
+    eprintln!("Workflow defaults:");
+    eprintln!("  --mode          modern");
+    eprintln!("  --input         feff.inp");
+    eprintln!("  --working-root  target/workflow-run");
+    eprintln!("  --legacy-runner feff85exafs/bin/f85e (when --mode legacy)");
     eprintln!();
     eprintln!("Parity defaults:");
     eprintln!("  --tests-root   feff85exafs/tests");
@@ -805,6 +947,41 @@ mod tests {
             }
             other => panic!("unexpected error type: {other}"),
         }
+    }
+
+    #[test]
+    fn parse_workflow_run_command_uses_expected_defaults() {
+        let command =
+            parse_workflow_run_command(&args(&["workflow", "run"])).expect("workflow should parse");
+        assert_eq!(command.mode, RunMode::Modern);
+        assert_eq!(command.input_path, PathBuf::from("feff.inp"));
+        assert_eq!(command.working_root, PathBuf::from("target/workflow-run"));
+        assert!(command.legacy_runner.is_none());
+    }
+
+    #[test]
+    fn parse_workflow_run_command_accepts_legacy_mode_and_custom_paths() {
+        let command = parse_workflow_run_command(&args(&[
+            "workflow",
+            "run",
+            "--mode",
+            "legacy",
+            "--input",
+            "fixtures/copper.inp",
+            "--working-root",
+            "target/workflow/copper",
+            "--legacy-runner",
+            "/tmp/f85e",
+        ]))
+        .expect("workflow command with custom arguments should parse");
+
+        assert_eq!(command.mode, RunMode::Legacy);
+        assert_eq!(command.input_path, PathBuf::from("fixtures/copper.inp"));
+        assert_eq!(
+            command.working_root,
+            PathBuf::from("target/workflow/copper")
+        );
+        assert_eq!(command.legacy_runner, Some(PathBuf::from("/tmp/f85e")));
     }
 
     #[test]
