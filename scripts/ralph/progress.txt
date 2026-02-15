@@ -11,6 +11,7 @@
 - Keep legacy-compatibility orchestration rules in `crates/feff85exafs-core/src/legacy.rs`; legacy baseline validation should require canonical legacy outputs (`feff.inp`, `files.dat`, `paths.dat`, `xmu.dat`, `chi.dat`, `f85e.log`, and at least one `feffNNNN.dat`).
 - Keep typed execution entrypoints in `crates/feff85exafs-core/src/api.rs` and make `src/main.rs` a thin argument-to-request adapter so CLI and library behavior stay in sync.
 - For modern API config handling, keep request execution in `api::run(RunRequest)` and route alternate config sources through `api::run_with_config(...)` / `api::run_from_file(...)` to avoid duplicating operation logic.
+- RDINP parser validation should use the corpus fixtures at `feff85exafs/tests/*/baseline/{noSCF,withSCF}/feff.inp`, and workspace-crate tests should resolve those fixtures via `env!("CARGO_MANIFEST_DIR")`.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -138,4 +139,17 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - File-based config support expects JSON shaped like `RunRequest`; parse failures currently surface as `FeffError::InvalidArgument`, while missing/blank path is reported as `FeffError::Validation` on `config.path`.
   - Useful context (e.g., "the evaluation panel is in component X")
     - `api::run_from_file(...)` is now available for integrations that still produce config files, while direct callers can use `api::run_with_config(RunConfigInput::InMemory { ... })`.
+---
+## 2026-02-16 04:50:57 JST - US-011
+- Implemented a new RDINP parser module in `feff85exafs-core` with `parse_rdinp(...)` / `parse_rdinp_str(...)` that parses the Phase 1 corpus card set (`TITLE`, `EDGE`, `S02`, `CONTROL`, `PRINT`, `EXCHANGE`, optional `SCF`, `RPATH`, `EXAFS`, optional `POLARIZATION`, optional `ELLIPTICITY`, `POTENTIALS`, `ATOMS`, optional `END`).
+- Added typed validation errors (`FeffError::Validation`) for unsupported cards/values, malformed numerics, malformed section rows, and missing required cards, including line-indexed field paths.
+- Added parser test coverage for all 16 baseline `feff.inp` fixtures across noSCF/withSCF plus targeted failure tests for unsupported cards, unsupported edge values, malformed numerics, and missing required cards.
+- Files changed: `crates/feff85exafs-core/src/lib.rs`, `crates/feff85exafs-core/src/rdinp.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Treat section rows under `POTENTIALS`/`ATOMS` as first-class parsed records (`POTENTIAL`/`ATOM`) so structural and value validation can run uniformly with top-level cards.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Some corpus fixtures intentionally omit `END`; parser validation should not require it, but must still require non-empty `POTENTIALS` and `ATOMS` sections.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Current Phase 1 baseline corpus contains 16 `feff.inp` fixtures (8 materials x 2 variants), and all parse successfully with the new RDINP implementation.
 ---
