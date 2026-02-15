@@ -3,6 +3,7 @@ use std::path::Path;
 
 use crate::baseline::{generate_noscf_manifests_for_mode, generate_withscf_manifests_for_mode};
 use crate::domain::RunMode;
+use crate::parity::{ParityReport, ParityReportRequest, generate_parity_report};
 use feff85exafs_errors::{FeffError, Result, ValidationErrors};
 use serde::{Deserialize, Serialize};
 
@@ -25,6 +26,7 @@ pub struct BaselineRunRequest {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RunOperation {
     Baseline(BaselineRunRequest),
+    ParityReport(ParityReportRequest),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -40,7 +42,7 @@ pub enum RunConfigInput {
     FilePath { path: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BaselineRunSuccess {
     pub variant: BaselineCorpusVariant,
     pub version: String,
@@ -49,13 +51,14 @@ pub struct BaselineRunSuccess {
     pub manifest_paths: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RunOperationSuccess {
     Baseline(BaselineRunSuccess),
+    ParityReport(ParityReport),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RunSuccess {
     pub mode: RunMode,
     pub result: RunOperationSuccess,
@@ -65,12 +68,24 @@ impl RunSuccess {
     pub fn baseline(&self) -> Option<&BaselineRunSuccess> {
         self.result.baseline()
     }
+
+    pub fn parity_report(&self) -> Option<&ParityReport> {
+        self.result.parity_report()
+    }
 }
 
 impl RunOperationSuccess {
     pub fn baseline(&self) -> Option<&BaselineRunSuccess> {
         match self {
             Self::Baseline(result) => Some(result),
+            Self::ParityReport(_) => None,
+        }
+    }
+
+    pub fn parity_report(&self) -> Option<&ParityReport> {
+        match self {
+            Self::ParityReport(result) => Some(result),
+            Self::Baseline(_) => None,
         }
     }
 }
@@ -94,6 +109,18 @@ impl RunRequest {
                 validate_non_empty(
                     &operation.version,
                     "operation.baseline.version",
+                    &mut errors,
+                );
+            }
+            RunOperation::ParityReport(operation) => {
+                validate_non_empty(
+                    &operation.tests_root,
+                    "operation.parity_report.tests_root",
+                    &mut errors,
+                );
+                validate_non_empty(
+                    &operation.working_root,
+                    "operation.parity_report.working_root",
                     &mut errors,
                 );
             }
@@ -176,6 +203,9 @@ fn execute(request: RunRequest) -> Result<RunSuccess> {
         RunOperation::Baseline(operation) => {
             RunOperationSuccess::Baseline(run_baseline_operation(&operation, request.mode)?)
         }
+        RunOperation::ParityReport(operation) => {
+            RunOperationSuccess::ParityReport(run_parity_report_operation(&operation)?)
+        }
     };
 
     Ok(RunSuccess {
@@ -238,6 +268,10 @@ fn run_baseline_operation(
     })
 }
 
+fn run_parity_report_operation(operation: &ParityReportRequest) -> Result<ParityReport> {
+    generate_parity_report(operation)
+}
+
 fn validate_non_empty(value: &str, field: &str, errors: &mut ValidationErrors) {
     if value.trim().is_empty() {
         errors.push(field, "must not be blank");
@@ -281,6 +315,10 @@ mod tests {
                 version: "vtest".to_string(),
             }),
         }
+    }
+
+    fn parity_fixture_root() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../feff85exafs/tests")
     }
 
     #[test]
@@ -364,6 +402,40 @@ mod tests {
     }
 
     #[test]
+    fn run_returns_structured_parity_report_success() {
+        let temp_root = temp_output_root();
+        let tests_root = temp_root.join("tests");
+        let baseline_root = tests_root.join("Copper/baseline/noSCF");
+        fs::create_dir_all(&baseline_root).expect("baseline fixture root should be created");
+
+        let fixture = parity_fixture_root().join("Copper/baseline/noSCF");
+        for file_name in ["feff.inp", "chi.dat", "xmu.dat"] {
+            fs::copy(fixture.join(file_name), baseline_root.join(file_name))
+                .unwrap_or_else(|error| panic!("failed to copy fixture {file_name}: {error}"));
+        }
+
+        let request = RunRequest {
+            mode: RunMode::Modern,
+            operation: RunOperation::ParityReport(ParityReportRequest {
+                tests_root: path_string(&tests_root),
+                working_root: path_string(&temp_root.join("work")),
+            }),
+        };
+
+        let result = run(request).expect("parity report run should succeed");
+        let report = result
+            .parity_report()
+            .expect("parity report result should be present");
+        assert_eq!(report.case_count, 1);
+        assert_eq!(report.file_count, 2);
+        assert_eq!(report.cases[0].file_reports.len(), 2);
+
+        if temp_root.exists() {
+            fs::remove_dir_all(&temp_root).expect("should clean temporary output directory");
+        }
+    }
+
+    #[test]
     fn run_returns_validation_error_for_blank_request_fields() {
         let err = run(RunRequest {
             mode: RunMode::Modern,
@@ -386,6 +458,31 @@ mod tests {
                 assert!(fields.contains(&"operation.baseline.tests_root"));
                 assert!(fields.contains(&"operation.baseline.output_root"));
                 assert!(fields.contains(&"operation.baseline.version"));
+            }
+            other => panic!("unexpected error type: {other}"),
+        }
+    }
+
+    #[test]
+    fn run_returns_validation_error_for_blank_parity_request_fields() {
+        let err = run(RunRequest {
+            mode: RunMode::Modern,
+            operation: RunOperation::ParityReport(ParityReportRequest {
+                tests_root: " ".to_string(),
+                working_root: "".to_string(),
+            }),
+        })
+        .expect_err("blank parity request fields should fail validation");
+
+        match err {
+            FeffError::Validation(validation) => {
+                let fields = validation
+                    .issues()
+                    .iter()
+                    .map(|issue| issue.field.as_str())
+                    .collect::<Vec<_>>();
+                assert!(fields.contains(&"operation.parity_report.tests_root"));
+                assert!(fields.contains(&"operation.parity_report.working_root"));
             }
             other => panic!("unexpected error type: {other}"),
         }

@@ -21,6 +21,7 @@
 - Keep GENFMT stage handoff typed by parsing Rust `pathNNNN.dat` summaries from pathfinder output and validating nearest-shell parity from generated `feffNNNN.dat` headers.
 - FF2X parity should resample Rust `feffNNNN.dat` k-grids to legacy `0.05` spacing before comparing `chi.dat`/`xmu.dat` signatures against baseline fixtures.
 - Test temp directories should include an atomic suffix in addition to timestamp/PID to avoid collisions when `cargo test --workspace` runs tests in parallel.
+- Parity regression gating should use `cargo run -- parity report` with paired thresholds (`--max-abs-delta` + `--max-rms-delta`) and optional allowlists keyed by `<material>/<variant>/<file>` IDs.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -251,4 +252,17 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - Legacy `chi.dat`/`xmu.dat` fixture resolutions vary slightly by case (400 vs 401 rows), so parity assertions should tolerate small row-count drift while enforcing signature-level checks.
   - Useful context (e.g., "the evaluation panel is in component X")
     - The complete Rust-native core chain now executes across all 16 corpus fixtures and emits final EXAFS artifacts (`chi.dat`, `xmu.dat`) without invoking legacy automation scripts.
+---
+## 2026-02-16 05:52:03 JST - US-019
+- Added a new parity report engine in `feff85exafs-core` that runs the full modern Rust core chain for each corpus baseline fixture and computes per-file numeric deltas (`max_abs`, `mean_abs`, `rms`) for `chi.dat` and `xmu.dat` versus legacy baseline files.
+- Extended typed API operations with `RunOperation::ParityReport` and structured parity report results, then added CLI support for `cargo run -- parity report` with optional regression gating (`--max-abs-delta`, `--max-rms-delta`) and allowlist controls (`--allow-regression`, `--allow-regression-file`).
+- Added CI-facing parity gate guidance and script (`docs/migration/parity-report.md`, `scripts/ci/parity-gate.sh`) and covered new parity request/report flows with unit tests in core API/CLI/parity modules.
+- Files changed: `crates/feff85exafs-core/src/parity.rs`, `crates/feff85exafs-core/src/api.rs`, `crates/feff85exafs-core/src/lib.rs`, `src/main.rs`, `docs/migration/parity-report.md`, `scripts/ci/parity-gate.sh`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Keep parity comparisons at the final artifact boundary (`chi.dat`/`xmu.dat`) and reuse typed stage handoffs to avoid duplicating per-stage parsing logic inside report tooling.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Regression gate semantics are only enabled when both thresholds are set; setting one threshold without the other is rejected to prevent ambiguous CI behavior.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Current corpus-wide parity deltas are dominated by `xmu.dat` for heavy-element fixtures (`UO2`, `Zircon`), so CI thresholds should be tuned with those fixtures in mind.
 ---

@@ -5,6 +5,7 @@ pub mod ff2x;
 pub mod genfmt;
 pub mod legacy;
 pub mod mode;
+pub mod parity;
 pub mod pathfinder;
 pub mod pot;
 pub mod rdinp;
