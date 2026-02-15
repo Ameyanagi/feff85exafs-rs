@@ -7,6 +7,7 @@
 - Keep baseline material coverage synchronized between `noSCF` and `withSCF`; SCF corpus generation should fail fast if either variant is missing materials so parity checks stay aligned.
 - Rust code now uses a Cargo workspace with the CLI at repo root and shared crates under `crates/`; run quality gates with `cargo fmt --all`, `cargo check --workspace`, and `cargo test --workspace`.
 - Shared Rust domain models should live in `crates/feff85exafs-core/src/domain.rs` and expose `validate()` methods that collect field issues in `ValidationErrors` and return `FeffError::Validation` for consistent API error handling.
+- For CLI/API mode flags, centralize parsing in `crates/feff85exafs-core/src/mode.rs` and return field-specific `FeffError::Validation` issues instead of free-form argument errors.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -82,4 +83,17 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - `OutputMetadata` validation should enforce unique `PipelineStage` entries; otherwise repeated stage metadata can silently hide orchestration issues.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Domain enums (`RunMode`, `ScfStrategy`, `PipelineStage`) are serde-ready and intended to be reused by upcoming CLI/API mode-selection and orchestration stories.
+---
+## 2026-02-16 04:31:16 JST - US-007
+- Added mode selection plumbing by introducing a reusable core mode API (`parse_run_mode`, `parse_run_mode_or_default`) and wiring CLI support for `--mode <legacy|modern>` with a default of `modern`.
+- Invalid mode values now return structured `FeffError::Validation` issues keyed to the `mode` field.
+- Added unit coverage for both core mode parsing and CLI mode argument parsing.
+- Files changed: `crates/feff85exafs-core/src/lib.rs`, `crates/feff85exafs-core/src/mode.rs`, `src/main.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Parse user-facing enum flags in core-library helpers and reuse them from CLI so mode semantics stay identical between API and command execution.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Keep filesystem-dependent execution separate from argument parsing; parsing can then be tested without creating corpus fixtures.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Current `baseline` command only uses mode selection as plumbing for upcoming orchestration stories and does not change manifest generation behavior by mode.
 ---
