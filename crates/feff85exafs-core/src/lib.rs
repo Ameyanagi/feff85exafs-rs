@@ -3,6 +3,7 @@ pub mod baseline;
 pub mod benchmark;
 pub mod debye;
 pub mod domain;
+pub mod exch;
 pub mod ff2x;
 pub mod genfmt;
 pub mod legacy;

@@ -19,6 +19,7 @@
 - For POT parity against legacy corpus fixtures, parse `files.dat` POT headers as the compatibility signature and accept both compact (`Z=29`) and spaced (`Z= 29`) numeric formatting.
 - For XSPH parity against legacy corpus fixtures, parse the `f85e.log` XSPH block (`dx=` and `phase shifts for unique potential <ipot>`) because baseline bundles do not preserve standalone XSPH stage files.
 - For non-core stage parity where baseline bundles lack dedicated stage artifacts, compare against stable `f85e.log` signatures (for DEBYE use `Global sig2`) instead of inferring from downstream files.
+- For EXCH parity, treat `files.dat` `Gam_ch` + `Mu/kf/Vint/Rs_int` rows as the canonical compatibility signature; those rows are stable across corpus variants and mirror legacy summaries.
 - Keep RDINP `RPATH` available in typed POT/pathfinder inputs; pathfinder parity drifts if `rmax` is inferred from full atom bounds instead of the configured path cutoff.
 - Keep GENFMT stage handoff typed by parsing Rust `pathNNNN.dat` summaries from pathfinder output and validating nearest-shell parity from generated `feffNNNN.dat` headers.
 - FF2X parity should resample Rust `feffNNNN.dat` k-grids to legacy `0.05` spacing before comparing `chi.dat`/`xmu.dat` signatures against baseline fixtures.
@@ -306,4 +307,17 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - Adding a new optional RDINP card requires updates in both `parse_card_line` and `validate_required_cards`; missing either side can silently break compatibility or cardinality validation.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Core corpus fixtures currently omit explicit `DEBYE` cards, so baseline parity for this stage is anchored on legacy `Global sig2` values (currently zero in the corpus logs).
+---
+## 2026-02-16 06:19:56 JST - US-023
+- Implemented a native Rust EXCH stage in `crates/feff85exafs-core/src/exch.rs` with typed input/output models (`ExchInputData`, `ExchOutputData`), typed handoff from parsed cards + GENFMT outputs, and deterministic `exchange.dat` artifact generation.
+- Added EXCH signature extraction and compatibility logic for canonical legacy rows (`Gam_ch`, `Mu`, `kf`, `Vint`, `Rs_int`) with structured validation and deterministic formatting.
+- Added EXCH corpus tests validating required artifact generation and parity against legacy `files.dat` signatures across all 16 baseline fixtures, plus targeted coverage for non-default `EXCHANGE` card overrides.
+- Files changed: `crates/feff85exafs-core/src/exch.rs`, `crates/feff85exafs-core/src/lib.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - EXCH stage parity is robust when exchange signatures are parsed from `files.dat` instead of inferred from downstream artifacts, because baseline fixtures preserve stable `Gam_ch` and `Mu/kf/Vint/Rs_int` rows.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - `Rs_int` values can be emitted with a space after `=` (`Rs_int= 1.989`), so signature parsers must allow optional whitespace between the field marker and numeric token.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Current baseline corpus uses `EXCHANGE 0`, so parity checks are exact against legacy signatures while override behavior is validated with targeted unit tests.
 ---
