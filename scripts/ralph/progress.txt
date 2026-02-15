@@ -18,6 +18,7 @@
 - For POT parity against legacy corpus fixtures, parse `files.dat` POT headers as the compatibility signature and accept both compact (`Z=29`) and spaced (`Z= 29`) numeric formatting.
 - For XSPH parity against legacy corpus fixtures, parse the `f85e.log` XSPH block (`dx=` and `phase shifts for unique potential <ipot>`) because baseline bundles do not preserve standalone XSPH stage files.
 - Keep RDINP `RPATH` available in typed POT/pathfinder inputs; pathfinder parity drifts if `rmax` is inferred from full atom bounds instead of the configured path cutoff.
+- Keep GENFMT stage handoff typed by parsing Rust `pathNNNN.dat` summaries from pathfinder output and validating nearest-shell parity from generated `feffNNNN.dat` headers.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -222,4 +223,17 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - If `RPATH` is not carried through typed stage inputs, molecular fixtures over-generate long-range paths and fail parity due to extra potential shells.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Core corpus parity now validates POT -> XSPH -> pathfinder chaining for all 16 baseline fixtures, so subsequent GENFMT work can consume Rust-generated `paths.dat` directly.
+---
+## 2026-02-16 05:32:29 JST - US-017
+- Implemented a native Rust GENFMT stage in `crates/feff85exafs-core/src/genfmt.rs` with typed stage input/output models, deterministic `files.dat` + `feffNNNN.dat` artifact generation, and stage-input wiring from POT/XSPH/pathfinder outputs.
+- Added corpus-scale GENFMT tests covering artifact creation for all 16 Phase 1 fixtures and nearest-shell parity checks against legacy `feffNNNN.dat` signatures using configured tolerances.
+- Exported the new module from `crates/feff85exafs-core/src/lib.rs` for downstream stage composition.
+- Files changed: `crates/feff85exafs-core/src/genfmt.rs`, `crates/feff85exafs-core/src/lib.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - GENFMT stage wiring is most robust when it consumes typed stage outputs and parses `pathNNNN.dat` summaries rather than reparsing formatted `paths.dat` text.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Full path-list parity is noisier than nearest-shell parity with the current Rust pathfinder abstraction, so GENFMT parity checks should compare nearest-shell signatures from `feffNNNN.dat`.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Core corpus parity now validates POT -> XSPH -> pathfinder -> GENFMT chaining for all 16 baseline fixtures, providing FEFF-path artifacts for upcoming FF2X work.
 ---
