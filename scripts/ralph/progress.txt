@@ -6,6 +6,7 @@
 - The baseline corpus runner should source data from `feff85exafs/tests/*/baseline/noSCF` and emit versioned manifests under `docs/migration/baselines/noSCF/<version>/` with deterministic `NNN-<slug>-noscf.json` naming plus `index.json`.
 - Keep baseline material coverage synchronized between `noSCF` and `withSCF`; SCF corpus generation should fail fast if either variant is missing materials so parity checks stay aligned.
 - Rust code now uses a Cargo workspace with the CLI at repo root and shared crates under `crates/`; run quality gates with `cargo fmt --all`, `cargo check --workspace`, and `cargo test --workspace`.
+- Shared Rust domain models should live in `crates/feff85exafs-core/src/domain.rs` and expose `validate()` methods that collect field issues in `ValidationErrors` and return `FeffError::Validation` for consistent API error handling.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -67,4 +68,18 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - When switching a module from `io::Result` to shared error types, explicit `Err(io::Error::other(...).into())` conversions are required in branches that construct errors directly.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Existing `cargo run -- baseline ...` commands continue to work because the root package remains a concrete crate even after enabling workspace members.
+---
+## 2026-02-16 04:27:21 JST - US-006
+- Implemented shared domain model types in `feff85exafs-core`: `RunConfig`, `ParsedInputCards`, and `OutputMetadata` with supporting enums/structs.
+- Added serde serialization/deserialization derives and explicit `validate()` methods for each domain model.
+- Extended `feff85exafs-errors` with `ValidationIssue`, `ValidationErrors`, and `FeffError::Validation` to report structured validation failures.
+- Added unit tests for validation success/failure scenarios and serde round-trips for all shared domain types.
+- Files changed: `crates/feff85exafs-core/src/lib.rs`, `crates/feff85exafs-core/src/domain.rs`, `crates/feff85exafs-errors/src/lib.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Use `ValidationErrors` as an accumulator and return a single `FeffError::Validation` from `validate()` so callers get all field failures in one pass.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - `OutputMetadata` validation should enforce unique `PipelineStage` entries; otherwise repeated stage metadata can silently hide orchestration issues.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Domain enums (`RunMode`, `ScfStrategy`, `PipelineStage`) are serde-ready and intended to be reused by upcoming CLI/API mode-selection and orchestration stories.
 ---
