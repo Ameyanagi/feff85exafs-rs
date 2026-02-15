@@ -18,6 +18,7 @@
 - POT stage defaults should preserve legacy SCF behavior when `SCF` cards only provide radius (`rfms1`): keep `lfms1=0` and `nscmt=30` unless explicitly provided by input values.
 - For POT parity against legacy corpus fixtures, parse `files.dat` POT headers as the compatibility signature and accept both compact (`Z=29`) and spaced (`Z= 29`) numeric formatting.
 - For XSPH parity against legacy corpus fixtures, parse the `f85e.log` XSPH block (`dx=` and `phase shifts for unique potential <ipot>`) because baseline bundles do not preserve standalone XSPH stage files.
+- For non-core stage parity where baseline bundles lack dedicated stage artifacts, compare against stable `f85e.log` signatures (for DEBYE use `Global sig2`) instead of inferring from downstream files.
 - Keep RDINP `RPATH` available in typed POT/pathfinder inputs; pathfinder parity drifts if `rmax` is inferred from full atom bounds instead of the configured path cutoff.
 - Keep GENFMT stage handoff typed by parsing Rust `pathNNNN.dat` summaries from pathfinder output and validating nearest-shell parity from generated `feffNNNN.dat` headers.
 - FF2X parity should resample Rust `feffNNNN.dat` k-grids to legacy `0.05` spacing before comparing `chi.dat`/`xmu.dat` signatures against baseline fixtures.
@@ -292,4 +293,17 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - `f85e` path resolution is layout-sensitive (`bin/f85e` sibling to `src`), so integration tests must preserve that structure exactly or module discovery fails.
   - Useful context (e.g., "the evaluation panel is in component X")
     - The current automated suite validates unchanged legacy orchestration only for `f85e`; `feff8l.sh` and `feff8l.py` remain documented manual-coverage exceptions.
+---
+## 2026-02-16 06:11:40 JST - US-022
+- Implemented a native Rust DEBYE stage in `crates/feff85exafs-core/src/debye.rs` with typed input/output models (`DebyeInputData`, `DebyeOutputData`), optional `DEBYE` card translation, and deterministic `sig2.dat` artifact generation.
+- Extended RDINP parsing to accept optional `DEBYE temp thetad [idwopt]` cards with structured validation errors and test coverage.
+- Added DEBYE corpus tests that validate typed handoff from parsed cards + GENFMT artifacts, required output generation, and parity against legacy `f85e.log` `Global sig2` signatures across all 16 baseline fixtures.
+- Files changed: `crates/feff85exafs-core/src/debye.rs`, `crates/feff85exafs-core/src/rdinp.rs`, `crates/feff85exafs-core/src/lib.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - When a stage does not have dedicated baseline artifacts in `feff85exafs/tests/*/baseline/*`, parity can still be made deterministic by comparing stable signatures from `f85e.log` instead of downstream generated files.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Adding a new optional RDINP card requires updates in both `parse_card_line` and `validate_required_cards`; missing either side can silently break compatibility or cardinality validation.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Core corpus fixtures currently omit explicit `DEBYE` cards, so baseline parity for this stage is anchored on legacy `Global sig2` values (currently zero in the corpus logs).
 ---

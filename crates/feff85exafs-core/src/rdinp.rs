@@ -22,6 +22,7 @@ struct CardCounters {
     control: usize,
     print: usize,
     exchange: usize,
+    debye: usize,
     scf: usize,
     rpath: usize,
     exafs: usize,
@@ -178,6 +179,32 @@ fn parse_card_line(
                 let _ = parse_f64(value, line_number, index)?;
             }
             state.counters.exchange += 1;
+            state.section = Section::None;
+            push_card(keyword, values, state);
+        }
+        "DEBYE" => {
+            expect_values_in_range(keyword, line_number, values, 2, 3)?;
+            let temperature = parse_f64(values[0], line_number, 0)?;
+            if temperature <= 0.0 {
+                return Err(validation_error(
+                    format!("line[{line_number}].values[0]"),
+                    "DEBYE temperature must be > 0",
+                ));
+            }
+
+            let debye_temperature = parse_f64(values[1], line_number, 1)?;
+            if debye_temperature < 0.0 {
+                return Err(validation_error(
+                    format!("line[{line_number}].values[1]"),
+                    "DEBYE Debye temperature must be >= 0",
+                ));
+            }
+
+            if let Some(idwopt) = values.get(2) {
+                let _ = parse_i64(idwopt, line_number, 2)?;
+            }
+
+            state.counters.debye += 1;
             state.section = Section::None;
             push_card(keyword, values, state);
         }
@@ -379,6 +406,7 @@ fn validate_required_cards(state: &ParseState) -> Result<()> {
     require_singleton(counters.exafs, "EXAFS")?;
     require_singleton(counters.potentials, "POTENTIALS")?;
     require_singleton(counters.atoms, "ATOMS")?;
+    require_max_one(counters.debye, "DEBYE")?;
     require_max_one(counters.scf, "SCF")?;
     require_max_one(counters.polarization, "POLARIZATION")?;
     require_max_one(counters.ellipticity, "ELLIPTICITY")?;
@@ -743,6 +771,37 @@ mod tests {
             });
             let legacy_cards = legacy_baseline_card_stream(&raw, &input);
             assert_cards_match_legacy_baseline(&input, &parsed.cards, &legacy_cards);
+        }
+    }
+
+    #[test]
+    fn accepts_optional_debye_card() {
+        let input = minimal_valid_input().replace("RPATH 4.0", "DEBYE 300 270 1\nRPATH 4.0");
+        let parsed =
+            parse_rdinp_str("inline", &input).expect("DEBYE card should be accepted when valid");
+
+        let debye = parsed
+            .cards
+            .iter()
+            .find(|card| card.keyword == "DEBYE")
+            .expect("parsed cards should include DEBYE");
+        assert_eq!(
+            debye.values,
+            vec!["300".to_string(), "270".to_string(), "1".to_string()]
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_debye_temperature() {
+        let input = minimal_valid_input().replace("RPATH 4.0", "DEBYE 0 270\nRPATH 4.0");
+        let err = parse_rdinp_str("inline", &input)
+            .expect_err("DEBYE with non-positive temperature should fail");
+        match err {
+            FeffError::Validation(validation) => {
+                assert_eq!(validation.len(), 1);
+                assert_eq!(validation.issues()[0].field, "line[7].values[0]");
+            }
+            other => panic!("unexpected error type: {other}"),
         }
     }
 
