@@ -3,6 +3,7 @@ use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
+use feff85exafs_errors::Result;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -84,7 +85,7 @@ pub fn generate_noscf_manifests(
     tests_root: &Path,
     output_root: &Path,
     version: &str,
-) -> io::Result<GenerationSummary> {
+) -> Result<GenerationSummary> {
     generate_manifests(tests_root, output_root, version, BaselineVariant::NoScf)
 }
 
@@ -92,7 +93,7 @@ pub fn generate_withscf_manifests(
     tests_root: &Path,
     output_root: &Path,
     version: &str,
-) -> io::Result<GenerationSummary> {
+) -> Result<GenerationSummary> {
     verify_withscf_has_same_materials(tests_root)?;
     generate_manifests(tests_root, output_root, version, BaselineVariant::WithScf)
 }
@@ -102,7 +103,7 @@ fn generate_manifests(
     output_root: &Path,
     version: &str,
     variant: BaselineVariant,
-) -> io::Result<GenerationSummary> {
+) -> Result<GenerationSummary> {
     let cases = discover_cases(tests_root, variant)?;
     let version_dir = output_root.join(variant.value()).join(version);
 
@@ -163,7 +164,7 @@ fn generate_manifests(
     })
 }
 
-fn verify_withscf_has_same_materials(tests_root: &Path) -> io::Result<()> {
+fn verify_withscf_has_same_materials(tests_root: &Path) -> Result<()> {
     let noscf_cases = discover_cases(tests_root, BaselineVariant::NoScf)?;
     let withscf_cases = discover_cases(tests_root, BaselineVariant::WithScf)?;
 
@@ -204,7 +205,8 @@ fn verify_withscf_has_same_materials(tests_root: &Path) -> io::Result<()> {
     Err(io::Error::other(format!(
         "SCF corpus must match noSCF materials: {}",
         problems.join("; ")
-    )))
+    ))
+    .into())
 }
 
 fn discover_cases(tests_root: &Path, variant: BaselineVariant) -> io::Result<Vec<CaseInput>> {

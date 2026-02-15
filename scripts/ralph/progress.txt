@@ -5,6 +5,7 @@
 - Phase scope docs in `docs/migration/` should define release readiness with paired gates per workflow: feature parity gates and test parity gates.
 - The baseline corpus runner should source data from `feff85exafs/tests/*/baseline/noSCF` and emit versioned manifests under `docs/migration/baselines/noSCF/<version>/` with deterministic `NNN-<slug>-noscf.json` naming plus `index.json`.
 - Keep baseline material coverage synchronized between `noSCF` and `withSCF`; SCF corpus generation should fail fast if either variant is missing materials so parity checks stay aligned.
+- Rust code now uses a Cargo workspace with the CLI at repo root and shared crates under `crates/`; run quality gates with `cargo fmt --all`, `cargo check --workspace`, and `cargo test --workspace`.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -54,4 +55,16 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - SCF corpus generation should validate material-set parity with noSCF before writing artifacts, otherwise index-level parity gates can silently drift.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Current corpus coverage is symmetric at 8 materials for both noSCF and withSCF, and SCF manifests are emitted as `NNN-<slug>-withscf.json`.
+---
+## 2026-02-16 04:23:26 JST - US-005
+- Scaffolded a Cargo workspace by adding `crates/feff85exafs-core` and `crates/feff85exafs-errors`, and wiring the root crate as the CLI package that depends on both workspace crates.
+- Moved baseline generation engine code into `feff85exafs-core` and introduced a shared `FeffError` type in `feff85exafs-errors` used by both core APIs and CLI argument handling.
+- Files changed: `Cargo.toml`, `Cargo.lock`, `src/main.rs`, `src/lib.rs` (deleted), `src/baseline.rs` (moved to core crate), `crates/feff85exafs-core/Cargo.toml`, `crates/feff85exafs-core/src/lib.rs`, `crates/feff85exafs-core/src/baseline.rs`, `crates/feff85exafs-errors/Cargo.toml`, `crates/feff85exafs-errors/src/lib.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Keep CLI-focused UX (argument parsing/output) in the root crate and put reusable execution logic into `crates/feff85exafs-core` so later API stories can build on the same core code.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - When switching a module from `io::Result` to shared error types, explicit `Err(io::Error::other(...).into())` conversions are required in branches that construct errors directly.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Existing `cargo run -- baseline ...` commands continue to work because the root package remains a concrete crate even after enabling workspace members.
 ---

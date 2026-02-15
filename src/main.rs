@@ -2,7 +2,8 @@ use std::env;
 use std::path::PathBuf;
 use std::process;
 
-use feff85exafs_rs::baseline::{generate_noscf_manifests, generate_withscf_manifests};
+use feff85exafs_core::baseline::{generate_noscf_manifests, generate_withscf_manifests};
+use feff85exafs_errors::{FeffError, Result};
 
 enum BaselineVariant {
     NoScf,
@@ -36,8 +37,8 @@ fn main() {
 
     match run(args) {
         Ok(()) => {}
-        Err(message) => {
-            eprintln!("error: {message}");
+        Err(error) => {
+            eprintln!("error: {error}");
             eprintln!();
             print_usage();
             process::exit(1);
@@ -45,16 +46,24 @@ fn main() {
     }
 }
 
-fn run(args: Vec<String>) -> Result<(), String> {
+fn run(args: Vec<String>) -> Result<()> {
     if args.first().map(String::as_str) != Some("baseline") {
-        return Err("only `baseline` is currently supported".to_string());
+        return Err(FeffError::InvalidArgument(
+            "only `baseline` is currently supported".to_string(),
+        ));
     }
     let variant = args
         .get(1)
-        .ok_or_else(|| "baseline variant must be one of: `noscf`, `scf`".to_string())
+        .ok_or_else(|| {
+            FeffError::InvalidArgument(
+                "baseline variant must be one of: `noscf`, `scf`".to_string(),
+            )
+        })
         .and_then(|value| {
             BaselineVariant::parse(value).ok_or_else(|| {
-                format!("unsupported baseline variant `{value}` (expected `noscf` or `scf`)")
+                FeffError::InvalidArgument(format!(
+                    "unsupported baseline variant `{value}` (expected `noscf` or `scf`)"
+                ))
             })
         })?;
 
@@ -67,41 +76,45 @@ fn run(args: Vec<String>) -> Result<(), String> {
         match args[idx].as_str() {
             "--tests-root" => {
                 idx += 1;
-                let value = args
-                    .get(idx)
-                    .ok_or_else(|| "missing value for --tests-root".to_string())?;
+                let value = args.get(idx).ok_or_else(|| {
+                    FeffError::InvalidArgument("missing value for --tests-root".to_string())
+                })?;
                 tests_root = PathBuf::from(value);
             }
             "--output-root" => {
                 idx += 1;
-                let value = args
-                    .get(idx)
-                    .ok_or_else(|| "missing value for --output-root".to_string())?;
+                let value = args.get(idx).ok_or_else(|| {
+                    FeffError::InvalidArgument("missing value for --output-root".to_string())
+                })?;
                 output_root = PathBuf::from(value);
             }
             "--version" => {
                 idx += 1;
-                let value = args
-                    .get(idx)
-                    .ok_or_else(|| "missing value for --version".to_string())?;
+                let value = args.get(idx).ok_or_else(|| {
+                    FeffError::InvalidArgument("missing value for --version".to_string())
+                })?;
                 version = value.clone();
             }
             unknown => {
-                return Err(format!("unknown argument `{unknown}`"));
+                return Err(FeffError::InvalidArgument(format!(
+                    "unknown argument `{unknown}`"
+                )));
             }
         }
         idx += 1;
     }
 
     if version.trim().is_empty() {
-        return Err("version cannot be empty".to_string());
+        return Err(FeffError::InvalidArgument(
+            "version cannot be empty".to_string(),
+        ));
     }
 
     let summary = match variant {
-        BaselineVariant::NoScf => generate_noscf_manifests(&tests_root, &output_root, &version)
-            .map_err(|err| format!("failed to generate noSCF baseline manifests: {err}"))?,
-        BaselineVariant::WithScf => generate_withscf_manifests(&tests_root, &output_root, &version)
-            .map_err(|err| format!("failed to generate withSCF baseline manifests: {err}"))?,
+        BaselineVariant::NoScf => generate_noscf_manifests(&tests_root, &output_root, &version)?,
+        BaselineVariant::WithScf => {
+            generate_withscf_manifests(&tests_root, &output_root, &version)?
+        }
     };
 
     println!(

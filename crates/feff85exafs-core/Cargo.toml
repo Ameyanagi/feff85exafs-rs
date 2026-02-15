@@ -1,0 +1,10 @@
+[package]
+name = "feff85exafs-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+feff85exafs-errors = { path = "../feff85exafs-errors" }
+serde = { version = "=1.0.219", features = ["derive"] }
+serde_json = "=1.0.140"
+sha2 = "=0.10.8"

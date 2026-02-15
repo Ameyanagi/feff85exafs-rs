@@ -47,12 +47,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "feff85exafs-rs"
+name = "feff85exafs-core"
 version = "0.1.0"
 dependencies = [
+ "feff85exafs-errors",
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "feff85exafs-errors"
+version = "0.1.0"
+
+[[package]]
+name = "feff85exafs-rs"
+version = "0.1.0"
+dependencies = [
+ "feff85exafs-core",
+ "feff85exafs-errors",
 ]
 
 [[package]]
