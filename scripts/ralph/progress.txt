@@ -13,6 +13,7 @@
 - For modern API config handling, keep request execution in `api::run(RunRequest)` and route alternate config sources through `api::run_with_config(...)` / `api::run_from_file(...)` to avoid duplicating operation logic.
 - RDINP parser validation should use the corpus fixtures at `feff85exafs/tests/*/baseline/{noSCF,withSCF}/feff.inp`, and workspace-crate tests should resolve those fixtures via `env!("CARGO_MANIFEST_DIR")`.
 - RDINP parity tests should compare parsed card streams against a legacy-style token stream derived from baseline `feff.inp` fixtures, enforcing exact card order/count with numeric tolerance (`1e-9` scaled) and case-insensitive text matching.
+- POT adapter JSON compatibility should preserve legacy key names `vro`/`vio` (while accepting `vr0`/`vi0` aliases) and treat missing `iplsmn` as default `0` when ingesting existing `libpotph.json` files.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -165,4 +166,17 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - Parity helpers must preserve section context (`POTENTIALS` vs `ATOMS`) when converting unlabeled data rows into `POTENTIAL`/`ATOM` records, or card-stream alignment fails.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Current parity test exercises all 16 core corpus inputs and emits index-specific mismatch messages (`card[i]`, `value[j]`) for quick regression triage.
+---
+## 2026-02-16 05:02:29 JST - US-013
+- Implemented a new POT adapter module with typed `PotInputData`/`PotOutputData` models, including validation logic for potential indexing, atom-to-potential references, and required POT artifact fields.
+- Added file translation helpers to read/write legacy-compatible `libpotph.json` payloads and to discover + serialize POT output artifacts (`pot.pad`, `potNN.dat`, optional `misc.dat`) as typed JSON manifests.
+- Added translation from RDINP parsed cards to POT typed input (`PotInputData::from_parsed_cards`) to establish the stage handoff boundary for upcoming POT compute work.
+- Files changed: `crates/feff85exafs-core/src/pot.rs`, `crates/feff85exafs-core/src/lib.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Keep POT adapter translation at the core crate boundary (`pot.rs`) so future compute orchestration can consume typed data and avoid direct card-string parsing.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Existing legacy `libpotph.json` fixtures use `vro`/`vio` keys and may omit `iplsmn`; serde adapters should support these compatibility quirks to avoid brittle ingestion.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - POT adapter tests now cover three paths: fixture parsing roundtrip, RDINP-to-POT translation, and filesystem output discovery/manifest roundtrip.
 ---
