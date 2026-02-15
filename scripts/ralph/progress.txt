@@ -2,6 +2,7 @@
 ## Codebase Patterns
 - Use `feff85exafs/src/*/Makefile` and `feff85exafs/src/*/SConstruct` as the canonical source for module dependency mapping; `README` files are descriptive but less precise for direct build deps.
 - The core execution chain for this project is fixed as `rdinp -> pot -> xsph -> pathfinder -> genfmt -> ff2x`; treat other modules as supporting or non-core unless a story explicitly expands scope.
+- Phase scope docs in `docs/migration/` should define release readiness with paired gates per workflow: feature parity gates and test parity gates.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -15,4 +16,15 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - Ralph tracking artifacts are under `scripts/ralph/` in this repository, not the repo root.
   - Useful context (e.g., "the evaluation panel is in component X")
     - `POT` and `XSPH` have the widest direct dependency surface among core stages and are likely to be the highest-risk integration boundaries during Rust porting.
+---
+## 2026-02-16 04:09:24 JST - US-002
+- Created `docs/migration/phase1-scope.md` defining Phase 1 core/supporting/non-core module scope and explicit release gates.
+- Files changed: `docs/migration/phase1-scope.md`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Migration planning docs in this repo should pair workflow-level feature parity criteria with workflow-level test parity criteria so release gates are objective.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Keep module classification aligned with `docs/migration/module-map.md`; `EXCH`/`FOVRG` are supporting dependencies for core execution but full standalone ports remain non-core until later stories.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - The strictest Phase 1 completion signal is end-to-end parity for both noSCF and SCF variants of the core chain, not just stage-level success.
 ---
