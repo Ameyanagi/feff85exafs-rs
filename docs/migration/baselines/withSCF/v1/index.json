@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "variant": "withSCF",
+  "source_root": "feff85exafs/tests",
+  "version": "v1",
+  "case_count": 8,
+  "cases": [
+    {
+      "material": "bromoadamantane",
+      "manifest": "001-bromoadamantane-withscf.json",
+      "source": "bromoadamantane/baseline/withSCF",
+      "file_count": 15,
+      "total_bytes": 122498
+    },
+    {
+      "material": "Copper",
+      "manifest": "002-copper-withscf.json",
+      "source": "Copper/baseline/withSCF",
+      "file_count": 19,
+      "total_bytes": 157129
+    },
+    {
+      "material": "ferrocene",
+      "manifest": "003-ferrocene-withscf.json",
+      "source": "ferrocene/baseline/withSCF",
+      "file_count": 40,
+      "total_bytes": 321208
+    },
+    {
+      "material": "LCO-para",
+      "manifest": "004-lco-para-withscf.json",
+      "source": "LCO-para/baseline/withSCF",
+      "file_count": 23,
+      "total_bytes": 195200
+    },
+    {
+      "material": "LCO-perp",
+      "manifest": "005-lco-perp-withscf.json",
+      "source": "LCO-perp/baseline/withSCF",
+      "file_count": 35,
+      "total_bytes": 270832
+    },
+    {
+      "material": "NiO",
+      "manifest": "006-nio-withscf.json",
+      "source": "NiO/baseline/withSCF",
+      "file_count": 85,
+      "total_bytes": 589307
+    },
+    {
+      "material": "UO2",
+      "manifest": "007-uo2-withscf.json",
+      "source": "UO2/baseline/withSCF",
+      "file_count": 22,
+      "total_bytes": 181462
+    },
+    {
+      "material": "Zircon",
+      "manifest": "008-zircon-withscf.json",
+      "source": "Zircon/baseline/withSCF",
+      "file_count": 33,
+      "total_bytes": 255042
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "material": "bromoadamantane",
+  "variant": "withSCF",
+  "source": "bromoadamantane/baseline/withSCF",
+  "file_count": 15,
+  "total_bytes": 122498,
+  "files": [
+    {
+      "path": "chi.dat",
+      "size": 23725,
+      "sha256": "23c66aa529bea53b8d7175c97ea31bbd620b03da6dcfd77fef29001e7972675e"
+    },
+    {
+      "path": "f85e.log",
+      "size": 12816,
+      "sha256": "c06da4c5ebd731bd1e50ac92860cb82f97578aaeb370b7233f5c66dcb805a16c"
+    },
+    {
+      "path": "feff.inp",
+      "size": 2017,
+      "sha256": "24fb7f3fd93a53ea3b33164eab4b96586a76b4c4a4cb901268bc9aadf610a8d3"
+    },
+    {
+      "path": "feff0001.dat",
+      "size": 5475,
+      "sha256": "1b80821412f49a9fc2ca10e7e3e36cc523a858caf118f80da45a929f1c07762a"
+    },
+    {
+      "path": "feff0002.dat",
+      "size": 5475,
+      "sha256": "71259d99a4f2ed7bdccf7772dd1583ef90076962a475b0bfa3efc84328910e61"
+    },
+    {
+      "path": "feff0003.dat",
+      "size": 5475,
+      "sha256": "4c7677f52a893b88ebe92afeb700a31c861056ba9d997de2dc64a78af23e562b"
+    },
+    {
+      "path": "feff0004.dat",
+      "size": 5521,
+      "sha256": "dfa7580e2ad87434ac3c84181d909eb0265935c28b47480b01805bd0b7d75b76"
+    },
+    {
+      "path": "feff0005.dat",
+      "size": 5521,
+      "sha256": "5a61eb19b4fcb0de4508bb7a012775b578bbf63433b188b55f20b2894e1840e4"
+    },
+    {
+      "path": "feff0006.dat",
+      "size": 5521,
+      "sha256": "91fac4febf7b45d4d04c56371bfa888af3fa55b19786b50ee804c49c025ad384"
+    },
+    {
+      "path": "feff0007.dat",
+      "size": 5521,
+      "sha256": "7ce862340550dcbf33957cecadd1ffacd493d74bbc04b287d99faa888f1457e0"
+    },
+    {
+      "path": "feff0008.dat",
+      "size": 5567,
+      "sha256": "4c37fa7084d5b58f03c99f2b6312f5477959aa4dbb8609b4d4f8e1066535d569"
+    },
+    {
+      "path": "feff0009.dat",
+      "size": 5567,
+      "sha256": "243adb28bf6fa6c83e1de1190e301c6e8e3e880d4d8cbee5d503a713c4f31349"
+    },
+    {
+      "path": "files.dat",
+      "size": 1052,
+      "sha256": "f4341054850b5e5c0101edd1bae4d6b3f41a41bdb34938261e5747cb570802e7"
+    },
+    {
+      "path": "paths.dat",
+      "size": 3472,
+      "sha256": "f9b960f9c1a22b99d0e3241dc3d1708228cb0f6089435e27b84baaea5faed40a"
+    },
+    {
+      "path": "xmu.dat",
+      "size": 29773,
+      "sha256": "6d68ebd082b555d2b36b47a798bc2c7fd8253ff380f7fbf26da4d01962a44e41"
+    }
+  ]
+}

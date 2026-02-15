@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "material": "ferrocene",
+  "variant": "withSCF",
+  "source": "ferrocene/baseline/withSCF",
+  "file_count": 40,
+  "total_bytes": 321208,
+  "files": [
+    {
+      "path": "chi.dat",
+      "size": 25576,
+      "sha256": "13eac5feec591117fdb3df4bed526aed60b18985b6e47eaf4498519d7bd6f881"
+    },
+    {
+      "path": "f85e.log",
+      "size": 35992,
+      "sha256": "50d9c721adb42f8d8b782ba9e984d8f82366b6f5295e3662a99a665415c65d1b"
+    },
+    {
+      "path": "feff.inp",
+      "size": 19578,
+      "sha256": "01f10048da55ee9bf382a0faa3444b614dcf1c0cee453fa49f169a51db44f6e4"
+    },
+    {
+      "path": "feff0001.dat",
+      "size": 5689,
+      "sha256": "54dbadf65531d70689d686c77128ebb11334458d2ab0055dcf355f126a21b772"
+    },
+    {
+      "path": "feff0002.dat",
+      "size": 5689,
+      "sha256": "d7a16c2e730a96e7174df4bf45a0aae9f6f79327b29b0e85d3f481565a66f86e"
+    },
+    {
+      "path": "feff0003.dat",
+      "size": 5689,
+      "sha256": "ef375248d69576e481e32f413816d54ee8196abd81e3bf382fee246fe491406b"
+    },
+    {
+      "path": "feff0004.dat",
+      "size": 5689,
+      "sha256": "cf03f138d7a2f3cd31fff16007e74bd5e40ed1c8087b9d740ecf312b720fb36e"
+    },
+    {
+      "path": "feff0005.dat",
+      "size": 5689,
+      "sha256": "9c95af30413e7619b47b0769d297657c93ae7151c71a97a12d0136d5937233fe"
+    },
+    {
+      "path": "feff0006.dat",
+      "size": 5689,
+      "sha256": "0ef387b31d15940f772eb7d278bb57d73d6c46e72da478b1a9ce64872f41b712"
+    },
+    {
+      "path": "feff0007.dat",
+      "size": 5689,
+      "sha256": "dbfe47d17e2784012522dc3dbf75ae2f0ed300dc41f45859efd454f382d1cf2c"
+    },
+    {
+      "path": "feff0008.dat",
+      "size": 5689,
+      "sha256": "a883b6245b9eb30448da1ed6c6a0fab0ac33d32bc80d97889ad6b7d61bc0272d"
+    },
+    {
+      "path": "feff0009.dat",
+      "size": 5689,
+      "sha256": "731c5805f81124f75327ee596427d7dee6334e5593997f81cda4ef742af4bdce"
+    },
+    {
+      "path": "feff0010.dat",
+      "size": 5689,
+      "sha256": "4f5b415a4430910f10d21a9778cb10a3eb96ba56e7c2f15bbebeb241c3bab832"
+    },
+    {
+      "path": "feff0011.dat",
+      "size": 5735,
+      "sha256": "85a8df68a3cc636b301eef92416a238c431f37b7c57a8a7a71403727712ae694"
+    },
+    {
+      "path": "feff0012.dat",
+      "size": 5735,
+      "sha256": "7e980258263ced07e9a8521ae5c7dac40726e83bd1d5e093689583a08a3d8aeb"
+    },
+    {
+      "path": "feff0013.dat",
+      "size": 5735,
+      "sha256": "4b5e0fae611d7891c58f9a4f6801c19483a6ee5cdc8de6c495d465573092c157"
+    },
+    {
+      "path": "feff0014.dat",
+      "size": 5735,
+      "sha256": "8a8dd806e6727050f12de95a33ea9266a3daa084041ce5da9fdcc274753bfcb3"
+    },
+    {
+      "path": "feff0015.dat",
+      "size": 5689,
+      "sha256": "23eab36848ef3f0e4d5a4dcd1ed521b394b7074ece3f16f5433ab059890d154c"
+    },
+    {
+      "path": "feff0016.dat",
+      "size": 5735,
+      "sha256": "91e3cbe0642d42fcd1152d2e6dd705bfa9432e8a095f3756810c223514720b74"
+    },
+    {
+      "path": "feff0017.dat",
+      "size": 5735,
+      "sha256": "a19115874c975aa43f7ef35089be4e21367f9290f2ab41d691e0961c629e6dc5"
+    },
+    {
+      "path": "feff0018.dat",
+      "size": 5689,
+      "sha256": "79366b74280d3d39daa7fc14b6d8c4ca73d650ffef2e110c6eabdc9b358a08d5"
+    },
+    {
+      "path": "feff0019.dat",
+      "size": 5689,
+      "sha256": "9484d2524c211951551fc3cbe67baa7c6b6f774acd40903fa67e7a0802fd68ec"
+    },
+    {
+      "path": "feff0020.dat",
+      "size": 5735,
+      "sha256": "e3732161ea9746ba1126451a1911c857f4b930ccd5594bed7a5a0292b1cf4790"
+    },
+    {
+      "path": "feff0021.dat",
+      "size": 5735,
+      "sha256": "901f5cbd19cf239c11d94edade708fc0f0cba43eb6df54b11eb9b7930ae716ed"
+    },
+    {
+      "path": "feff0022.dat",
+      "size": 5735,
+      "sha256": "052b7338859a23150367ce597d9666fb0f9a3465c5e3380fd02ec1018d67a319"
+    },
+    {
+      "path": "feff0023.dat",
+      "size": 5735,
+      "sha256": "847f310260409026e9ab5309198c4f29b7984895e545f1cc7c243246ae4a51f4"
+    },
+    {
+      "path": "feff0024.dat",
+      "size": 5689,
+      "sha256": "a5ddc04fd2db19bb7f04c8de327108856a88b90f0560a743df738d343cba597d"
+    },
+    {
+      "path": "feff0025.dat",
+      "size": 5689,
+      "sha256": "bbfff56a8eb64cb33a28eb6a2a91f1c97dce8dbee6c666dc344d033b3900e995"
+    },
+    {
+      "path": "feff0026.dat",
+      "size": 5689,
+      "sha256": "0cf97962315cc17fb69957548f78cbd9438fc53aaf25af99b8e13b626351704f"
+    },
+    {
+      "path": "feff0027.dat",
+      "size": 5689,
+      "sha256": "47d30e893d4bd74ea84630f694a1e736da586feab38a2b69185480318c6d45d2"
+    },
+    {
+      "path": "feff0028.dat",
+      "size": 5689,
+      "sha256": "edfc1c13f690f71945e7daaedc3bee029f63c9f45c30b6d286b3c8fa3e3867f6"
+    },
+    {
+      "path": "feff0029.dat",
+      "size": 5735,
+      "sha256": "7a7eb5296eb64c6127cd2bd924120d2a9ea61e2735d79ffbfde9f2018707e84d"
+    },
+    {
+      "path": "feff0030.dat",
+      "size": 5735,
+      "sha256": "ca13dfbc851963562ab20f8fa88c041d70274870da27f24148d194a243e62e52"
+    },
+    {
+      "path": "feff0031.dat",
+      "size": 5735,
+      "sha256": "7e58e3d661a1689557a832a789a0737df9c3e9254f1260025dc50561937a39a1"
+    },
+    {
+      "path": "feff0032.dat",
+      "size": 5735,
+      "sha256": "a1cce28a6dad676d7118ffb52f49de0747c4acc93f4bc7975fa911ccac334c0c"
+    },
+    {
+      "path": "feff0033.dat",
+      "size": 5735,
+      "sha256": "fa9c1cd60a72833a405f3c1bc9420d6640fc232dc861fd717bcfd69f08de8e33"
+    },
+    {
+      "path": "feff0034.dat",
+      "size": 5735,
+      "sha256": "c48419353f9049c0441c02ca2c7d5c003d95051a01f71ffe256d2f26b4b3fde9"
+    },
+    {
+      "path": "files.dat",
+      "size": 2691,
+      "sha256": "221fdcc7bef8883bc1c6403077fae85e989e16a1a771027ed4c554fb09ba0912"
+    },
+    {
+      "path": "paths.dat",
+      "size": 11570,
+      "sha256": "0fffdacb9e6a40e41df4bea17f7ca1883496c59051daabcec73980db88cd254a"
+    },
+    {
+      "path": "xmu.dat",
+      "size": 31639,
+      "sha256": "9c2662a297e627352920115fac6b2b98c858ec4e59af8501d32ace740ac3cd3e"
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -17,7 +18,29 @@ pub struct GenerationSummary {
 #[derive(Debug, Clone)]
 struct CaseInput {
     material: String,
-    no_scf_dir: PathBuf,
+    baseline_dir: PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BaselineVariant {
+    NoScf,
+    WithScf,
+}
+
+impl BaselineVariant {
+    fn value(self) -> &'static str {
+        match self {
+            Self::NoScf => "noSCF",
+            Self::WithScf => "withSCF",
+        }
+    }
+
+    fn manifest_suffix(self) -> &'static str {
+        match self {
+            Self::NoScf => "noscf",
+            Self::WithScf => "withscf",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -62,8 +85,26 @@ pub fn generate_noscf_manifests(
     output_root: &Path,
     version: &str,
 ) -> io::Result<GenerationSummary> {
-    let cases = discover_noscf_cases(tests_root)?;
-    let version_dir = output_root.join("noSCF").join(version);
+    generate_manifests(tests_root, output_root, version, BaselineVariant::NoScf)
+}
+
+pub fn generate_withscf_manifests(
+    tests_root: &Path,
+    output_root: &Path,
+    version: &str,
+) -> io::Result<GenerationSummary> {
+    verify_withscf_has_same_materials(tests_root)?;
+    generate_manifests(tests_root, output_root, version, BaselineVariant::WithScf)
+}
+
+fn generate_manifests(
+    tests_root: &Path,
+    output_root: &Path,
+    version: &str,
+    variant: BaselineVariant,
+) -> io::Result<GenerationSummary> {
+    let cases = discover_cases(tests_root, variant)?;
+    let version_dir = output_root.join(variant.value()).join(version);
 
     if version_dir.exists() {
         fs::remove_dir_all(&version_dir)?;
@@ -74,20 +115,20 @@ pub fn generate_noscf_manifests(
     let mut index_entries = Vec::with_capacity(cases.len());
 
     for (idx, case) in cases.iter().enumerate() {
-        let files = collect_file_digests(&case.no_scf_dir)?;
+        let files = collect_file_digests(&case.baseline_dir)?;
         let total_bytes = files.iter().map(|file| file.size).sum();
         let source = path_string(
-            case.no_scf_dir
+            case.baseline_dir
                 .strip_prefix(tests_root)
-                .unwrap_or(case.no_scf_dir.as_path()),
+                .unwrap_or(case.baseline_dir.as_path()),
         );
-        let manifest_name = manifest_file_name(idx + 1, &case.material);
+        let manifest_name = manifest_file_name(idx + 1, &case.material, variant);
         let manifest_path = version_dir.join(&manifest_name);
 
         let manifest = CaseManifest {
             schema_version: SCHEMA_VERSION,
             material: case.material.clone(),
-            variant: "noSCF".to_string(),
+            variant: variant.value().to_string(),
             source: source.clone(),
             file_count: files.len(),
             total_bytes,
@@ -107,7 +148,7 @@ pub fn generate_noscf_manifests(
 
     let index = CorpusIndex {
         schema_version: SCHEMA_VERSION,
-        variant: "noSCF".to_string(),
+        variant: variant.value().to_string(),
         source_root: path_string(tests_root),
         version: version.to_string(),
         case_count: index_entries.len(),
@@ -122,7 +163,51 @@ pub fn generate_noscf_manifests(
     })
 }
 
-fn discover_noscf_cases(tests_root: &Path) -> io::Result<Vec<CaseInput>> {
+fn verify_withscf_has_same_materials(tests_root: &Path) -> io::Result<()> {
+    let noscf_cases = discover_cases(tests_root, BaselineVariant::NoScf)?;
+    let withscf_cases = discover_cases(tests_root, BaselineVariant::WithScf)?;
+
+    let noscf_materials: BTreeSet<String> =
+        noscf_cases.into_iter().map(|case| case.material).collect();
+    let withscf_materials: BTreeSet<String> = withscf_cases
+        .into_iter()
+        .map(|case| case.material)
+        .collect();
+
+    let missing_withscf: Vec<String> = noscf_materials
+        .difference(&withscf_materials)
+        .cloned()
+        .collect();
+    let missing_noscf: Vec<String> = withscf_materials
+        .difference(&noscf_materials)
+        .cloned()
+        .collect();
+
+    if missing_withscf.is_empty() && missing_noscf.is_empty() {
+        return Ok(());
+    }
+
+    let mut problems = Vec::new();
+    if !missing_withscf.is_empty() {
+        problems.push(format!(
+            "missing withSCF baselines for: {}",
+            missing_withscf.join(", ")
+        ));
+    }
+    if !missing_noscf.is_empty() {
+        problems.push(format!(
+            "unexpected withSCF-only baselines for: {}",
+            missing_noscf.join(", ")
+        ));
+    }
+
+    Err(io::Error::other(format!(
+        "SCF corpus must match noSCF materials: {}",
+        problems.join("; ")
+    )))
+}
+
+fn discover_cases(tests_root: &Path, variant: BaselineVariant) -> io::Result<Vec<CaseInput>> {
     let mut cases = Vec::new();
 
     for entry in fs::read_dir(tests_root)? {
@@ -132,11 +217,11 @@ fn discover_noscf_cases(tests_root: &Path) -> io::Result<Vec<CaseInput>> {
         }
         let material_path = entry.path();
         let material = entry.file_name().to_string_lossy().into_owned();
-        let no_scf_dir = material_path.join("baseline").join("noSCF");
-        if no_scf_dir.is_dir() {
+        let baseline_dir = material_path.join("baseline").join(variant.value());
+        if baseline_dir.is_dir() {
             cases.push(CaseInput {
                 material,
-                no_scf_dir,
+                baseline_dir,
             });
         }
     }
@@ -206,8 +291,12 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
     Ok(())
 }
 
-fn manifest_file_name(index: usize, material: &str) -> String {
-    format!("{index:03}-{}-noscf.json", slugify(material))
+fn manifest_file_name(index: usize, material: &str, variant: BaselineVariant) -> String {
+    format!(
+        "{index:03}-{}-{}.json",
+        slugify(material),
+        variant.manifest_suffix()
+    )
 }
 
 fn path_string(path: &Path) -> String {
@@ -293,16 +382,22 @@ mod tests {
     }
 
     #[test]
-    fn discover_noscf_cases_ignores_incomplete_materials() {
+    fn discover_cases_filters_by_variant() {
         let tmp = TempDir::new().expect("create temp dir");
         let tests_root = tmp.path.join("tests");
 
         fs::create_dir_all(tests_root.join("Alpha/baseline/noSCF")).expect("make Alpha noSCF");
         fs::create_dir_all(tests_root.join("Beta/baseline/withSCF")).expect("make Beta withSCF");
 
-        let cases = discover_noscf_cases(&tests_root).expect("discover cases");
-        assert_eq!(cases.len(), 1);
-        assert_eq!(cases[0].material, "Alpha");
+        let no_scf_cases =
+            discover_cases(&tests_root, BaselineVariant::NoScf).expect("discover noSCF cases");
+        assert_eq!(no_scf_cases.len(), 1);
+        assert_eq!(no_scf_cases[0].material, "Alpha");
+
+        let with_scf_cases =
+            discover_cases(&tests_root, BaselineVariant::WithScf).expect("discover withSCF cases");
+        assert_eq!(with_scf_cases.len(), 1);
+        assert_eq!(with_scf_cases[0].material, "Beta");
     }
 
     #[test]
@@ -353,5 +448,91 @@ mod tests {
             fs::read_to_string(second.version_dir.join("index.json")).expect("read second index");
 
         assert_eq!(first_index, second_index);
+    }
+
+    #[test]
+    fn generate_withscf_manifests_is_deterministic() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let tests_root = tmp.path.join("tests");
+        let output_root = tmp.path.join("artifacts");
+
+        write_file(
+            &tests_root.join("Beta/baseline/noSCF/feff.inp"),
+            "beta noSCF baseline",
+        )
+        .expect("write Beta noSCF file");
+        write_file(
+            &tests_root.join("Beta/baseline/withSCF/feff.inp"),
+            "beta withSCF baseline",
+        )
+        .expect("write Beta withSCF file");
+        write_file(
+            &tests_root.join("alpha/baseline/noSCF/files.dat"),
+            "alpha noSCF files",
+        )
+        .expect("write alpha noSCF file");
+        write_file(
+            &tests_root.join("alpha/baseline/withSCF/files.dat"),
+            "alpha withSCF files",
+        )
+        .expect("write alpha withSCF file");
+        write_file(
+            &tests_root.join("alpha/baseline/withSCF/sub/xmu.dat"),
+            "alpha withSCF xmu",
+        )
+        .expect("write alpha withSCF nested file");
+
+        let first = generate_withscf_manifests(&tests_root, &output_root, "v1")
+            .expect("generate first withSCF run manifests");
+        let first_index = fs::read_to_string(first.version_dir.join("index.json"))
+            .expect("read first withSCF index");
+
+        assert_eq!(first.case_count, 2);
+        assert_eq!(
+            first
+                .manifest_paths
+                .iter()
+                .map(|path| {
+                    path.file_name()
+                        .expect("manifest file name")
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .collect::<Vec<_>>(),
+            vec!["001-alpha-withscf.json", "002-beta-withscf.json"]
+        );
+
+        let second = generate_withscf_manifests(&tests_root, &output_root, "v1")
+            .expect("generate second withSCF run manifests");
+        let second_index = fs::read_to_string(second.version_dir.join("index.json"))
+            .expect("read second withSCF index");
+
+        assert_eq!(first_index, second_index);
+    }
+
+    #[test]
+    fn generate_withscf_manifests_requires_matching_material_sets() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let tests_root = tmp.path.join("tests");
+        let output_root = tmp.path.join("artifacts");
+
+        write_file(
+            &tests_root.join("alpha/baseline/noSCF/feff.inp"),
+            "alpha noSCF baseline",
+        )
+        .expect("write alpha noSCF file");
+        write_file(
+            &tests_root.join("beta/baseline/withSCF/feff.inp"),
+            "beta withSCF baseline",
+        )
+        .expect("write beta withSCF file");
+
+        let err = generate_withscf_manifests(&tests_root, &output_root, "v1")
+            .expect_err("withSCF generation should fail when case sets differ");
+        assert!(
+            err.to_string()
+                .contains("SCF corpus must match noSCF materials"),
+            "unexpected error: {err}"
+        );
     }
 }

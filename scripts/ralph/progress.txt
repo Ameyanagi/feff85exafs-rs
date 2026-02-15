@@ -4,6 +4,7 @@
 - The core execution chain for this project is fixed as `rdinp -> pot -> xsph -> pathfinder -> genfmt -> ff2x`; treat other modules as supporting or non-core unless a story explicitly expands scope.
 - Phase scope docs in `docs/migration/` should define release readiness with paired gates per workflow: feature parity gates and test parity gates.
 - The baseline corpus runner should source data from `feff85exafs/tests/*/baseline/noSCF` and emit versioned manifests under `docs/migration/baselines/noSCF/<version>/` with deterministic `NNN-<slug>-noscf.json` naming plus `index.json`.
+- Keep baseline material coverage synchronized between `noSCF` and `withSCF`; SCF corpus generation should fail fast if either variant is missing materials so parity checks stay aligned.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -38,6 +39,19 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - Corpus generation for migration artifacts is stable when material folders are lexicographically sorted and manifests avoid runtime-specific values (timestamps/random IDs).
   - Gotchas encountered (e.g., "don't forget to update Z when changing W")
     - `cargo fmt --check` should be run before `cargo check/test` in this repo, since small CLI formatting issues are easy to miss and block quality gates.
-  - Useful context (e.g., "the evaluation panel is in component X")
+- Useful context (e.g., "the evaluation panel is in component X")
     - The legacy test corpus currently yields 8 noSCF material cases (`bromoadamantane`, `Copper`, `ferrocene`, `LCO-para`, `LCO-perp`, `NiO`, `UO2`, `Zircon`) for baseline manifest generation.
+---
+## 2026-02-16 04:19:55 JST - US-004
+- Extended the Rust baseline corpus runner to support SCF generation via `cargo run -- baseline scf` (also `withscf` aliases), while keeping deterministic ordering, hashing, and manifest naming.
+- Generated versioned SCF artifacts under `docs/migration/baselines/withSCF/v1/` for the same 8 reference materials used by noSCF baselines.
+- Added SCF regeneration documentation with command usage and environment prerequisites in `docs/migration/scf-baseline-corpus.md`.
+- Files changed: `src/baseline.rs`, `src/main.rs`, `docs/migration/scf-baseline-corpus.md`, `docs/migration/baselines/withSCF/v1/index.json`, `docs/migration/baselines/withSCF/v1/001-bromoadamantane-withscf.json`, `docs/migration/baselines/withSCF/v1/002-copper-withscf.json`, `docs/migration/baselines/withSCF/v1/003-ferrocene-withscf.json`, `docs/migration/baselines/withSCF/v1/004-lco-para-withscf.json`, `docs/migration/baselines/withSCF/v1/005-lco-perp-withscf.json`, `docs/migration/baselines/withSCF/v1/006-nio-withscf.json`, `docs/migration/baselines/withSCF/v1/007-uo2-withscf.json`, `docs/migration/baselines/withSCF/v1/008-zircon-withscf.json`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Baseline generation logic is easiest to keep consistent by routing both noSCF/withSCF through the same manifest pipeline and only varying the variant metadata/path suffixes.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - SCF corpus generation should validate material-set parity with noSCF before writing artifacts, otherwise index-level parity gates can silently drift.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Current corpus coverage is symmetric at 8 materials for both noSCF and withSCF, and SCF manifests are emitted as `NNN-<slug>-withscf.json`.
 ---

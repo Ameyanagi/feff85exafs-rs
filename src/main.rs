@@ -2,7 +2,30 @@ use std::env;
 use std::path::PathBuf;
 use std::process;
 
-use feff85exafs_rs::baseline::generate_noscf_manifests;
+use feff85exafs_rs::baseline::{generate_noscf_manifests, generate_withscf_manifests};
+
+enum BaselineVariant {
+    NoScf,
+    WithScf,
+}
+
+impl BaselineVariant {
+    fn parse(value: &str) -> Option<Self> {
+        let normalized = value.to_ascii_lowercase();
+        match normalized.as_str() {
+            "noscf" => Some(Self::NoScf),
+            "scf" | "withscf" | "with-scf" => Some(Self::WithScf),
+            _ => None,
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match self {
+            Self::NoScf => "noSCF",
+            Self::WithScf => "withSCF",
+        }
+    }
+}
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -26,9 +49,14 @@ fn run(args: Vec<String>) -> Result<(), String> {
     if args.first().map(String::as_str) != Some("baseline") {
         return Err("only `baseline` is currently supported".to_string());
     }
-    if args.get(1).map(String::as_str) != Some("noscf") {
-        return Err("baseline variant must be `noscf`".to_string());
-    }
+    let variant = args
+        .get(1)
+        .ok_or_else(|| "baseline variant must be one of: `noscf`, `scf`".to_string())
+        .and_then(|value| {
+            BaselineVariant::parse(value).ok_or_else(|| {
+                format!("unsupported baseline variant `{value}` (expected `noscf` or `scf`)")
+            })
+        })?;
 
     let mut tests_root = PathBuf::from("feff85exafs/tests");
     let mut output_root = PathBuf::from("docs/migration/baselines");
@@ -69,12 +97,17 @@ fn run(args: Vec<String>) -> Result<(), String> {
         return Err("version cannot be empty".to_string());
     }
 
-    let summary = generate_noscf_manifests(&tests_root, &output_root, &version)
-        .map_err(|err| format!("failed to generate noSCF baseline manifests: {err}"))?;
+    let summary = match variant {
+        BaselineVariant::NoScf => generate_noscf_manifests(&tests_root, &output_root, &version)
+            .map_err(|err| format!("failed to generate noSCF baseline manifests: {err}"))?,
+        BaselineVariant::WithScf => generate_withscf_manifests(&tests_root, &output_root, &version)
+            .map_err(|err| format!("failed to generate withSCF baseline manifests: {err}"))?,
+    };
 
     println!(
-        "Generated {} noSCF manifests in {}",
+        "Generated {} {} manifests in {}",
         summary.case_count,
+        variant.label(),
         summary.version_dir.display()
     );
     println!("Manifest files:");
@@ -87,8 +120,11 @@ fn run(args: Vec<String>) -> Result<(), String> {
 fn print_usage() {
     eprintln!("Usage:");
     eprintln!(
-        "  cargo run -- baseline noscf [--tests-root PATH] [--output-root PATH] [--version VERSION]"
+        "  cargo run -- baseline <noscf|scf> [--tests-root PATH] [--output-root PATH] [--version VERSION]"
     );
+    eprintln!();
+    eprintln!("Variant aliases:");
+    eprintln!("  scf: accepts `scf`, `withscf`, and `with-scf`");
     eprintln!();
     eprintln!("Defaults:");
     eprintln!("  --tests-root  feff85exafs/tests");
