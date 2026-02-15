@@ -2,8 +2,11 @@ use std::env;
 use std::path::PathBuf;
 use std::process;
 
-use feff85exafs_core::baseline::{generate_noscf_manifests, generate_withscf_manifests};
+use feff85exafs_core::baseline::{
+    generate_noscf_manifests_for_mode, generate_withscf_manifests_for_mode,
+};
 use feff85exafs_core::domain::RunMode;
+use feff85exafs_core::legacy::{legacy_stage_name, legacy_stage_order};
 use feff85exafs_core::mode::{parse_run_mode_or_default, run_mode_value};
 use feff85exafs_errors::{FeffError, Result};
 
@@ -62,15 +65,30 @@ fn run(args: Vec<String>) -> Result<()> {
     let command = parse_baseline_command(&args)?;
 
     let summary = match command.variant {
-        BaselineVariant::NoScf => {
-            generate_noscf_manifests(&command.tests_root, &command.output_root, &command.version)?
-        }
-        BaselineVariant::WithScf => {
-            generate_withscf_manifests(&command.tests_root, &command.output_root, &command.version)?
-        }
+        BaselineVariant::NoScf => generate_noscf_manifests_for_mode(
+            &command.tests_root,
+            &command.output_root,
+            &command.version,
+            command.mode,
+        )?,
+        BaselineVariant::WithScf => generate_withscf_manifests_for_mode(
+            &command.tests_root,
+            &command.output_root,
+            &command.version,
+            command.mode,
+        )?,
     };
 
     println!("Using run mode: {}", run_mode_value(command.mode));
+    if command.mode == RunMode::Legacy {
+        let legacy_order = legacy_stage_order()
+            .iter()
+            .map(|stage| legacy_stage_name(*stage))
+            .collect::<Vec<_>>()
+            .join(" -> ");
+        println!("Legacy stage order: {legacy_order}");
+        println!("Legacy default behavior: preserve historical baseline filenames");
+    }
     println!(
         "Generated {} {} manifests in {}",
         summary.case_count,

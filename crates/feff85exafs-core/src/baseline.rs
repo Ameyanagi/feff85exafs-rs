@@ -3,6 +3,8 @@ use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
+use crate::domain::RunMode;
+use crate::legacy::validate_legacy_baseline_file_names;
 use feff85exafs_errors::Result;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -86,7 +88,22 @@ pub fn generate_noscf_manifests(
     output_root: &Path,
     version: &str,
 ) -> Result<GenerationSummary> {
-    generate_manifests(tests_root, output_root, version, BaselineVariant::NoScf)
+    generate_noscf_manifests_for_mode(tests_root, output_root, version, RunMode::Modern)
+}
+
+pub fn generate_noscf_manifests_for_mode(
+    tests_root: &Path,
+    output_root: &Path,
+    version: &str,
+    mode: RunMode,
+) -> Result<GenerationSummary> {
+    generate_manifests(
+        tests_root,
+        output_root,
+        version,
+        BaselineVariant::NoScf,
+        mode,
+    )
 }
 
 pub fn generate_withscf_manifests(
@@ -94,8 +111,23 @@ pub fn generate_withscf_manifests(
     output_root: &Path,
     version: &str,
 ) -> Result<GenerationSummary> {
+    generate_withscf_manifests_for_mode(tests_root, output_root, version, RunMode::Modern)
+}
+
+pub fn generate_withscf_manifests_for_mode(
+    tests_root: &Path,
+    output_root: &Path,
+    version: &str,
+    mode: RunMode,
+) -> Result<GenerationSummary> {
     verify_withscf_has_same_materials(tests_root)?;
-    generate_manifests(tests_root, output_root, version, BaselineVariant::WithScf)
+    generate_manifests(
+        tests_root,
+        output_root,
+        version,
+        BaselineVariant::WithScf,
+        mode,
+    )
 }
 
 fn generate_manifests(
@@ -103,6 +135,7 @@ fn generate_manifests(
     output_root: &Path,
     version: &str,
     variant: BaselineVariant,
+    mode: RunMode,
 ) -> Result<GenerationSummary> {
     let cases = discover_cases(tests_root, variant)?;
     let version_dir = output_root.join(variant.value()).join(version);
@@ -117,6 +150,7 @@ fn generate_manifests(
 
     for (idx, case) in cases.iter().enumerate() {
         let files = collect_file_digests(&case.baseline_dir)?;
+        ensure_legacy_file_contract(mode, &files)?;
         let total_bytes = files.iter().map(|file| file.size).sum();
         let source = path_string(
             case.baseline_dir
@@ -161,6 +195,20 @@ fn generate_manifests(
         version_dir,
         case_count: manifests.len(),
         manifest_paths: manifests,
+    })
+}
+
+fn ensure_legacy_file_contract(mode: RunMode, files: &[FileDigest]) -> Result<()> {
+    if mode != RunMode::Legacy {
+        return Ok(());
+    }
+
+    let file_names = files
+        .iter()
+        .map(|file| file.path.clone())
+        .collect::<Vec<_>>();
+    validate_legacy_baseline_file_names(&file_names).map_err(|message| {
+        io::Error::other(format!("legacy mode baseline validation failed: {message}")).into()
     })
 }
 
@@ -536,5 +584,75 @@ mod tests {
                 .contains("SCF corpus must match noSCF materials"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn legacy_mode_requires_historical_baseline_file_names() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let tests_root = tmp.path.join("tests");
+        let output_root = tmp.path.join("artifacts");
+
+        write_file(
+            &tests_root.join("alpha/baseline/noSCF/feff.inp"),
+            "alpha noSCF baseline",
+        )
+        .expect("write alpha noSCF file");
+
+        let err =
+            generate_noscf_manifests_for_mode(&tests_root, &output_root, "v1", RunMode::Legacy)
+                .expect_err("legacy mode should fail when expected names are missing");
+        assert!(
+            err.to_string()
+                .contains("legacy mode baseline validation failed"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn legacy_mode_accepts_historical_baseline_file_names() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let tests_root = tmp.path.join("tests");
+        let output_root = tmp.path.join("artifacts");
+
+        write_file(
+            &tests_root.join("alpha/baseline/noSCF/feff.inp"),
+            "alpha noSCF baseline",
+        )
+        .expect("write feff input");
+        write_file(
+            &tests_root.join("alpha/baseline/noSCF/files.dat"),
+            "files index",
+        )
+        .expect("write files.dat");
+        write_file(
+            &tests_root.join("alpha/baseline/noSCF/paths.dat"),
+            "paths index",
+        )
+        .expect("write paths.dat");
+        write_file(
+            &tests_root.join("alpha/baseline/noSCF/xmu.dat"),
+            "xmu output",
+        )
+        .expect("write xmu.dat");
+        write_file(
+            &tests_root.join("alpha/baseline/noSCF/chi.dat"),
+            "chi output",
+        )
+        .expect("write chi.dat");
+        write_file(
+            &tests_root.join("alpha/baseline/noSCF/f85e.log"),
+            "legacy log",
+        )
+        .expect("write f85e.log");
+        write_file(
+            &tests_root.join("alpha/baseline/noSCF/feff0001.dat"),
+            "path data",
+        )
+        .expect("write feff dat");
+
+        let summary =
+            generate_noscf_manifests_for_mode(&tests_root, &output_root, "v1", RunMode::Legacy)
+                .expect("legacy mode should accept expected output names");
+        assert_eq!(summary.case_count, 1);
     }
 }
