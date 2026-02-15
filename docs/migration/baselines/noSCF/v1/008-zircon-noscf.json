@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "material": "Zircon",
+  "variant": "noSCF",
+  "source": "Zircon/baseline/noSCF",
+  "file_count": 31,
+  "total_bytes": 227857,
+  "files": [
+    {
+      "path": "chi.dat",
+      "size": 24776,
+      "sha256": "813f96a91d482e73cd4ec3b6a605b93cee7e2fc2ee5afd27afef1369b54cf000"
+    },
+    {
+      "path": "f85e.log",
+      "size": 5323,
+      "sha256": "4b17380a4034da5f348d6bbd26c65f858ccae96bdb1948c4213854dd91579ffd"
+    },
+    {
+      "path": "feff.inp",
+      "size": 14531,
+      "sha256": "f3de0af1d1b050382fdf7043d5b19dd3f29a2a94056379a4a5e190e2f51afccc"
+    },
+    {
+      "path": "feff0001.dat",
+      "size": 5582,
+      "sha256": "c923847333a4e4a6c6d4a95aef5a84cc98c4f36364e83d45184edc83d8a49bfe"
+    },
+    {
+      "path": "feff0002.dat",
+      "size": 5628,
+      "sha256": "5a8a727d8cd68de1ca20abe07c6e5d063823064a45694d39ec680abbbbf9ca64"
+    },
+    {
+      "path": "feff0003.dat",
+      "size": 5628,
+      "sha256": "8fa7bff57c46da2b7e6c9c7b609b0ffb929afb765a9e2acaf0528c213e84dea6"
+    },
+    {
+      "path": "feff0004.dat",
+      "size": 5582,
+      "sha256": "fc8839413ee46705db8d18fc850533d23169d730811ff73b3fee7658257e3c7f"
+    },
+    {
+      "path": "feff0005.dat",
+      "size": 5674,
+      "sha256": "7ea7e011e6efb33c3253bb4ab44d326dd81ea89d5ec26006f26673459ae1d709"
+    },
+    {
+      "path": "feff0006.dat",
+      "size": 5674,
+      "sha256": "2d762f419a8a9e687ed91c95e3525adeefc03f0ba02aa2a6f75a7306b0c0f5ea"
+    },
+    {
+      "path": "feff0007.dat",
+      "size": 5674,
+      "sha256": "ee9a9571f6b7a02e01798f124aa7984ccb523f8b573b18fe9f4949af639a282b"
+    },
+    {
+      "path": "feff0008.dat",
+      "size": 5582,
+      "sha256": "a359d2e94d5ac6d86ebc282cbcb5ee2dadc320f4ee8ed846195046e0c61423cf"
+    },
+    {
+      "path": "feff0009.dat",
+      "size": 5628,
+      "sha256": "6c091e667be80f64012e7999e097eb18c18932433f7246226bfb790d3bcf42be"
+    },
+    {
+      "path": "feff0010.dat",
+      "size": 5582,
+      "sha256": "b3ecb64d98e0f7570de581bfe354da9e34f98b2ab291243d1fd4be5c8f8a62bf"
+    },
+    {
+      "path": "feff0011.dat",
+      "size": 5582,
+      "sha256": "b88f8183414469a154f0cae9b9844de366615213eff701d3f232be3d0bdc135b"
+    },
+    {
+      "path": "feff0012.dat",
+      "size": 5582,
+      "sha256": "b8da113289e1a99f1ca985a89ccc10bd50238d59bea39158dec5f94c5588484b"
+    },
+    {
+      "path": "feff0013.dat",
+      "size": 5628,
+      "sha256": "256af25783315049efc63aed365495ac19cfe25bcc5e772f5de627ded536af7d"
+    },
+    {
+      "path": "feff0014.dat",
+      "size": 5674,
+      "sha256": "6dfe7b5d6b5179280e006f227b61658be879c4db37d7dbdd774bdbf4378905c1"
+    },
+    {
+      "path": "feff0015.dat",
+      "size": 5628,
+      "sha256": "426ecba9aefe9f00a27cd0114173ef3ae499c297680fbdeb45424f313ba33c7d"
+    },
+    {
+      "path": "feff0016.dat",
+      "size": 5628,
+      "sha256": "829f28e0c15eb8a89b5689daf4ace38f08dd79a2744ee76f7e890b7f6dda38df"
+    },
+    {
+      "path": "feff0017.dat",
+      "size": 5674,
+      "sha256": "954702783ee6d7ec69ce33bffbc8e66b9cff501c02e79da6ecb02fcd21dd5c29"
+    },
+    {
+      "path": "feff0018.dat",
+      "size": 5582,
+      "sha256": "9e47ff6f34785d9dd6bfd7b2516986d917de6172072a64363de8079cd0d474b1"
+    },
+    {
+      "path": "feff0019.dat",
+      "size": 5628,
+      "sha256": "c9006858b18535c66a1a2b4e8f5cf2e1840ff95cb45555fdaea946e76242eb41"
+    },
+    {
+      "path": "feff0020.dat",
+      "size": 5674,
+      "sha256": "f24d79f752ae012ddfb2ae7777d9ffaca0267ae892b40707d3dc5f7a9b39ae12"
+    },
+    {
+      "path": "feff0021.dat",
+      "size": 5674,
+      "sha256": "c4a3dc113ea27f10c98691919fd13daba92f6e7311365d7b0e2e0fc0f9e77977"
+    },
+    {
+      "path": "feff0022.dat",
+      "size": 5628,
+      "sha256": "438adf1f7f9e7372b86c3848bd90f78fa013aff8f4a96eedf5de2a38eafd52bb"
+    },
+    {
+      "path": "feff0023.dat",
+      "size": 5674,
+      "sha256": "99575000f7109fd53af2e9a392d7202084261d6cba82bb9a248e53cf9cc7b8c1"
+    },
+    {
+      "path": "feff0024.dat",
+      "size": 5582,
+      "sha256": "fefbd001f57b8fbafa0cae9d5f1cc4379399cd3dc7c2f495e689fa3f997789f4"
+    },
+    {
+      "path": "feff0025.dat",
+      "size": 5628,
+      "sha256": "934f55315673592169c8b674d6ca5acf7524c851cdecc784d744ece85ca0122b"
+    },
+    {
+      "path": "files.dat",
+      "size": 2071,
+      "sha256": "08b6ac0c7afddb131d4001a265305ea35d2988f9a559efbb38e51c4a2c4aa372"
+    },
+    {
+      "path": "paths.dat",
+      "size": 9617,
+      "sha256": "5a193f298ac6f9091ed391cf935f83487075b46da025a9f8493c448c9bb6b207"
+    },
+    {
+      "path": "xmu.dat",
+      "size": 30839,
+      "sha256": "d70133c2e521cf76590aebb2b1e496b552be8c76f5b7c154dead4cfc6ea568bb"
+    }
+  ]
+}

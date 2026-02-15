@@ -1,3 +1,97 @@
+use std::env;
+use std::path::PathBuf;
+use std::process;
+
+use feff85exafs_rs::baseline::generate_noscf_manifests;
+
 fn main() {
-    println!("Hello, world!");
+    let args: Vec<String> = env::args().skip(1).collect();
+    if args.is_empty() || args.iter().any(|arg| arg == "-h" || arg == "--help") {
+        print_usage();
+        return;
+    }
+
+    match run(args) {
+        Ok(()) => {}
+        Err(message) => {
+            eprintln!("error: {message}");
+            eprintln!();
+            print_usage();
+            process::exit(1);
+        }
+    }
+}
+
+fn run(args: Vec<String>) -> Result<(), String> {
+    if args.first().map(String::as_str) != Some("baseline") {
+        return Err("only `baseline` is currently supported".to_string());
+    }
+    if args.get(1).map(String::as_str) != Some("noscf") {
+        return Err("baseline variant must be `noscf`".to_string());
+    }
+
+    let mut tests_root = PathBuf::from("feff85exafs/tests");
+    let mut output_root = PathBuf::from("docs/migration/baselines");
+    let mut version = "v1".to_string();
+
+    let mut idx = 2;
+    while idx < args.len() {
+        match args[idx].as_str() {
+            "--tests-root" => {
+                idx += 1;
+                let value = args
+                    .get(idx)
+                    .ok_or_else(|| "missing value for --tests-root".to_string())?;
+                tests_root = PathBuf::from(value);
+            }
+            "--output-root" => {
+                idx += 1;
+                let value = args
+                    .get(idx)
+                    .ok_or_else(|| "missing value for --output-root".to_string())?;
+                output_root = PathBuf::from(value);
+            }
+            "--version" => {
+                idx += 1;
+                let value = args
+                    .get(idx)
+                    .ok_or_else(|| "missing value for --version".to_string())?;
+                version = value.clone();
+            }
+            unknown => {
+                return Err(format!("unknown argument `{unknown}`"));
+            }
+        }
+        idx += 1;
+    }
+
+    if version.trim().is_empty() {
+        return Err("version cannot be empty".to_string());
+    }
+
+    let summary = generate_noscf_manifests(&tests_root, &output_root, &version)
+        .map_err(|err| format!("failed to generate noSCF baseline manifests: {err}"))?;
+
+    println!(
+        "Generated {} noSCF manifests in {}",
+        summary.case_count,
+        summary.version_dir.display()
+    );
+    println!("Manifest files:");
+    for manifest in summary.manifest_paths {
+        println!("  {}", manifest.display());
+    }
+    Ok(())
+}
+
+fn print_usage() {
+    eprintln!("Usage:");
+    eprintln!(
+        "  cargo run -- baseline noscf [--tests-root PATH] [--output-root PATH] [--version VERSION]"
+    );
+    eprintln!();
+    eprintln!("Defaults:");
+    eprintln!("  --tests-root  feff85exafs/tests");
+    eprintln!("  --output-root docs/migration/baselines");
+    eprintln!("  --version     v1");
 }

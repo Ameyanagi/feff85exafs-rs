@@ -1,0 +1,357 @@
+use std::fs::{self, File};
+use std::io::{self, Read};
+use std::path::{Path, PathBuf};
+
+use serde::Serialize;
+use sha2::{Digest, Sha256};
+
+const SCHEMA_VERSION: u32 = 1;
+
+#[derive(Debug, Clone)]
+pub struct GenerationSummary {
+    pub version_dir: PathBuf,
+    pub case_count: usize,
+    pub manifest_paths: Vec<PathBuf>,
+}
+
+#[derive(Debug, Clone)]
+struct CaseInput {
+    material: String,
+    no_scf_dir: PathBuf,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct FileDigest {
+    path: String,
+    size: u64,
+    sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct CaseManifest {
+    schema_version: u32,
+    material: String,
+    variant: String,
+    source: String,
+    file_count: usize,
+    total_bytes: u64,
+    files: Vec<FileDigest>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct CorpusIndex {
+    schema_version: u32,
+    variant: String,
+    source_root: String,
+    version: String,
+    case_count: usize,
+    cases: Vec<IndexEntry>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct IndexEntry {
+    material: String,
+    manifest: String,
+    source: String,
+    file_count: usize,
+    total_bytes: u64,
+}
+
+pub fn generate_noscf_manifests(
+    tests_root: &Path,
+    output_root: &Path,
+    version: &str,
+) -> io::Result<GenerationSummary> {
+    let cases = discover_noscf_cases(tests_root)?;
+    let version_dir = output_root.join("noSCF").join(version);
+
+    if version_dir.exists() {
+        fs::remove_dir_all(&version_dir)?;
+    }
+    fs::create_dir_all(&version_dir)?;
+
+    let mut manifests = Vec::with_capacity(cases.len());
+    let mut index_entries = Vec::with_capacity(cases.len());
+
+    for (idx, case) in cases.iter().enumerate() {
+        let files = collect_file_digests(&case.no_scf_dir)?;
+        let total_bytes = files.iter().map(|file| file.size).sum();
+        let source = path_string(
+            case.no_scf_dir
+                .strip_prefix(tests_root)
+                .unwrap_or(case.no_scf_dir.as_path()),
+        );
+        let manifest_name = manifest_file_name(idx + 1, &case.material);
+        let manifest_path = version_dir.join(&manifest_name);
+
+        let manifest = CaseManifest {
+            schema_version: SCHEMA_VERSION,
+            material: case.material.clone(),
+            variant: "noSCF".to_string(),
+            source: source.clone(),
+            file_count: files.len(),
+            total_bytes,
+            files,
+        };
+
+        write_json(&manifest_path, &manifest)?;
+        manifests.push(manifest_path.clone());
+        index_entries.push(IndexEntry {
+            material: case.material.clone(),
+            manifest: manifest_name,
+            source,
+            file_count: manifest.file_count,
+            total_bytes: manifest.total_bytes,
+        });
+    }
+
+    let index = CorpusIndex {
+        schema_version: SCHEMA_VERSION,
+        variant: "noSCF".to_string(),
+        source_root: path_string(tests_root),
+        version: version.to_string(),
+        case_count: index_entries.len(),
+        cases: index_entries,
+    };
+    write_json(&version_dir.join("index.json"), &index)?;
+
+    Ok(GenerationSummary {
+        version_dir,
+        case_count: manifests.len(),
+        manifest_paths: manifests,
+    })
+}
+
+fn discover_noscf_cases(tests_root: &Path) -> io::Result<Vec<CaseInput>> {
+    let mut cases = Vec::new();
+
+    for entry in fs::read_dir(tests_root)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let material_path = entry.path();
+        let material = entry.file_name().to_string_lossy().into_owned();
+        let no_scf_dir = material_path.join("baseline").join("noSCF");
+        if no_scf_dir.is_dir() {
+            cases.push(CaseInput {
+                material,
+                no_scf_dir,
+            });
+        }
+    }
+
+    cases.sort_by(|left, right| {
+        left.material
+            .to_ascii_lowercase()
+            .cmp(&right.material.to_ascii_lowercase())
+            .then_with(|| left.material.cmp(&right.material))
+    });
+
+    Ok(cases)
+}
+
+fn collect_file_digests(root: &Path) -> io::Result<Vec<FileDigest>> {
+    let mut stack = vec![root.to_path_buf()];
+    let mut files = Vec::new();
+
+    while let Some(dir) = stack.pop() {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let file_type = entry.file_type()?;
+            if file_type.is_dir() {
+                stack.push(path);
+            } else if file_type.is_file() {
+                files.push(path);
+            }
+        }
+    }
+
+    files.sort();
+
+    let mut digests = Vec::with_capacity(files.len());
+    for file in files {
+        let rel = file
+            .strip_prefix(root)
+            .map_err(|_| io::Error::other("failed to build a relative baseline path"))?;
+        digests.push(FileDigest {
+            path: path_string(rel),
+            size: file.metadata()?.len(),
+            sha256: sha256_hex(&file)?,
+        });
+    }
+    Ok(digests)
+}
+
+fn sha256_hex(path: &Path) -> io::Result<String> {
+    let mut file = File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 8 * 1024];
+    loop {
+        let bytes_read = file.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn write_json<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
+    let mut content = serde_json::to_string_pretty(value)
+        .map_err(|err| io::Error::other(format!("failed to serialize JSON: {err}")))?;
+    content.push('\n');
+    fs::write(path, content)?;
+    Ok(())
+}
+
+fn manifest_file_name(index: usize, material: &str) -> String {
+    format!("{index:03}-{}-noscf.json", slugify(material))
+}
+
+fn path_string(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn slugify(input: &str) -> String {
+    let mut slug = String::new();
+    let mut previous_dash = false;
+
+    for ch in input.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+            previous_dash = false;
+        } else if !previous_dash {
+            slug.push('-');
+            previous_dash = true;
+        }
+    }
+
+    while slug.starts_with('-') {
+        slug.remove(0);
+    }
+    while slug.ends_with('-') {
+        slug.pop();
+    }
+
+    if slug.is_empty() {
+        "case".to_string()
+    } else {
+        slug
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::io::Write;
+    use std::process;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    struct TempDir {
+        path: PathBuf,
+    }
+
+    impl TempDir {
+        fn new() -> io::Result<Self> {
+            let unique = format!(
+                "feff85exafs-rs-baseline-{}-{}",
+                process::id(),
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("system time before unix epoch")
+                    .as_nanos()
+            );
+            let path = env::temp_dir().join(unique);
+            fs::create_dir_all(&path)?;
+            Ok(Self { path })
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn write_file(path: &Path, content: &str) -> io::Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut file = File::create(path)?;
+        file.write_all(content.as_bytes())?;
+        Ok(())
+    }
+
+    #[test]
+    fn slugify_collapses_symbol_runs() {
+        assert_eq!(slugify("LCO-perp"), "lco-perp");
+        assert_eq!(slugify("NiO test_case"), "nio-test-case");
+        assert_eq!(slugify("___"), "case");
+    }
+
+    #[test]
+    fn discover_noscf_cases_ignores_incomplete_materials() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let tests_root = tmp.path.join("tests");
+
+        fs::create_dir_all(tests_root.join("Alpha/baseline/noSCF")).expect("make Alpha noSCF");
+        fs::create_dir_all(tests_root.join("Beta/baseline/withSCF")).expect("make Beta withSCF");
+
+        let cases = discover_noscf_cases(&tests_root).expect("discover cases");
+        assert_eq!(cases.len(), 1);
+        assert_eq!(cases[0].material, "Alpha");
+    }
+
+    #[test]
+    fn generate_noscf_manifests_is_deterministic() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let tests_root = tmp.path.join("tests");
+        let output_root = tmp.path.join("artifacts");
+
+        write_file(
+            &tests_root.join("Beta/baseline/noSCF/feff.inp"),
+            "beta baseline",
+        )
+        .expect("write Beta file");
+        write_file(
+            &tests_root.join("alpha/baseline/noSCF/files.dat"),
+            "alpha files",
+        )
+        .expect("write alpha file");
+        write_file(
+            &tests_root.join("alpha/baseline/noSCF/sub/xmu.dat"),
+            "alpha xmu",
+        )
+        .expect("write alpha nested file");
+
+        let first = generate_noscf_manifests(&tests_root, &output_root, "v1")
+            .expect("generate first run manifests");
+        let index_path = first.version_dir.join("index.json");
+        let first_index = fs::read_to_string(&index_path).expect("read first index");
+
+        assert_eq!(first.case_count, 2);
+        assert_eq!(
+            first
+                .manifest_paths
+                .iter()
+                .map(|path| {
+                    path.file_name()
+                        .expect("manifest file name")
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .collect::<Vec<_>>(),
+            vec!["001-alpha-noscf.json", "002-beta-noscf.json"]
+        );
+
+        let second = generate_noscf_manifests(&tests_root, &output_root, "v1")
+            .expect("generate second run manifests");
+        let second_index =
+            fs::read_to_string(second.version_dir.join("index.json")).expect("read second index");
+
+        assert_eq!(first_index, second_index);
+    }
+}

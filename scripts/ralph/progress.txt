@@ -3,6 +3,7 @@
 - Use `feff85exafs/src/*/Makefile` and `feff85exafs/src/*/SConstruct` as the canonical source for module dependency mapping; `README` files are descriptive but less precise for direct build deps.
 - The core execution chain for this project is fixed as `rdinp -> pot -> xsph -> pathfinder -> genfmt -> ff2x`; treat other modules as supporting or non-core unless a story explicitly expands scope.
 - Phase scope docs in `docs/migration/` should define release readiness with paired gates per workflow: feature parity gates and test parity gates.
+- The baseline corpus runner should source data from `feff85exafs/tests/*/baseline/noSCF` and emit versioned manifests under `docs/migration/baselines/noSCF/<version>/` with deterministic `NNN-<slug>-noscf.json` naming plus `index.json`.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -27,4 +28,16 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - Keep module classification aligned with `docs/migration/module-map.md`; `EXCH`/`FOVRG` are supporting dependencies for core execution but full standalone ports remain non-core until later stories.
   - Useful context (e.g., "the evaluation panel is in component X")
     - The strictest Phase 1 completion signal is end-to-end parity for both noSCF and SCF variants of the core chain, not just stage-level success.
+---
+## 2026-02-16 04:14:51 JST - US-003
+- Implemented a Rust noSCF baseline corpus runner (`cargo run -- baseline noscf`) that discovers material baselines in `feff85exafs/tests`, computes per-file SHA-256 digests, and writes deterministic per-material manifests plus an index.
+- Stored versioned noSCF corpus artifacts under `docs/migration/baselines/noSCF/v1/` with deterministic `NNN-<material>-noscf.json` names.
+- Files changed: `Cargo.toml`, `Cargo.lock`, `src/lib.rs`, `src/baseline.rs`, `src/main.rs`, `docs/migration/noscf-baseline-corpus.md`, `docs/migration/baselines/noSCF/v1/index.json`, `docs/migration/baselines/noSCF/v1/001-bromoadamantane-noscf.json`, `docs/migration/baselines/noSCF/v1/002-copper-noscf.json`, `docs/migration/baselines/noSCF/v1/003-ferrocene-noscf.json`, `docs/migration/baselines/noSCF/v1/004-lco-para-noscf.json`, `docs/migration/baselines/noSCF/v1/005-lco-perp-noscf.json`, `docs/migration/baselines/noSCF/v1/006-nio-noscf.json`, `docs/migration/baselines/noSCF/v1/007-uo2-noscf.json`, `docs/migration/baselines/noSCF/v1/008-zircon-noscf.json`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Corpus generation for migration artifacts is stable when material folders are lexicographically sorted and manifests avoid runtime-specific values (timestamps/random IDs).
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - `cargo fmt --check` should be run before `cargo check/test` in this repo, since small CLI formatting issues are easy to miss and block quality gates.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - The legacy test corpus currently yields 8 noSCF material cases (`bromoadamantane`, `Copper`, `ferrocene`, `LCO-para`, `LCO-perp`, `NiO`, `UO2`, `Zircon`) for baseline manifest generation.
 ---
