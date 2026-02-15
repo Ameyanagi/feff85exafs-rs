@@ -5,3 +5,4 @@ pub mod legacy;
 pub mod mode;
 pub mod pot;
 pub mod rdinp;
+pub mod xsph;
