@@ -2,8 +2,8 @@ use std::env;
 use std::path::PathBuf;
 use std::process;
 
-use feff85exafs_core::baseline::{
-    generate_noscf_manifests_for_mode, generate_withscf_manifests_for_mode,
+use feff85exafs_core::api::{
+    BaselineCorpusVariant, BaselineRunRequest, RunOperation, RunRequest, run as run_modern_api,
 };
 use feff85exafs_core::domain::RunMode;
 use feff85exafs_core::legacy::{legacy_stage_name, legacy_stage_order};
@@ -41,6 +41,13 @@ impl BaselineVariant {
             Self::WithScf => "withSCF",
         }
     }
+
+    fn to_api_variant(self) -> BaselineCorpusVariant {
+        match self {
+            Self::NoScf => BaselineCorpusVariant::NoScf,
+            Self::WithScf => BaselineCorpusVariant::WithScf,
+        }
+    }
 }
 
 fn main() {
@@ -50,7 +57,7 @@ fn main() {
         return;
     }
 
-    match run(args) {
+    match run_cli(args) {
         Ok(()) => {}
         Err(error) => {
             eprintln!("error: {error}");
@@ -61,23 +68,22 @@ fn main() {
     }
 }
 
-fn run(args: Vec<String>) -> Result<()> {
+fn run_cli(args: Vec<String>) -> Result<()> {
     let command = parse_baseline_command(&args)?;
-
-    let summary = match command.variant {
-        BaselineVariant::NoScf => generate_noscf_manifests_for_mode(
-            &command.tests_root,
-            &command.output_root,
-            &command.version,
-            command.mode,
-        )?,
-        BaselineVariant::WithScf => generate_withscf_manifests_for_mode(
-            &command.tests_root,
-            &command.output_root,
-            &command.version,
-            command.mode,
-        )?,
+    let request = RunRequest {
+        mode: command.mode,
+        operation: RunOperation::Baseline(BaselineRunRequest {
+            variant: command.variant.to_api_variant(),
+            tests_root: command.tests_root.to_string_lossy().into_owned(),
+            output_root: command.output_root.to_string_lossy().into_owned(),
+            version: command.version.clone(),
+        }),
     };
+
+    let run_result = run_modern_api(request)?;
+    let summary = run_result
+        .baseline()
+        .expect("baseline command should always return baseline success");
 
     println!("Using run mode: {}", run_mode_value(command.mode));
     if command.mode == RunMode::Legacy {
@@ -91,13 +97,13 @@ fn run(args: Vec<String>) -> Result<()> {
     }
     println!(
         "Generated {} {} manifests in {}",
-        summary.case_count,
+        summary.manifest_count,
         command.variant.label(),
-        summary.version_dir.display()
+        summary.version_dir
     );
     println!("Manifest files:");
-    for manifest in summary.manifest_paths {
-        println!("  {}", manifest.display());
+    for manifest in &summary.manifest_paths {
+        println!("  {manifest}");
     }
     Ok(())
 }

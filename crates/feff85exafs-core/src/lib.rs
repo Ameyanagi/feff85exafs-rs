@@ -1,3 +1,4 @@
+pub mod api;
 pub mod baseline;
 pub mod domain;
 pub mod legacy;

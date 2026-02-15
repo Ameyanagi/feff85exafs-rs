@@ -9,6 +9,7 @@
 - Shared Rust domain models should live in `crates/feff85exafs-core/src/domain.rs` and expose `validate()` methods that collect field issues in `ValidationErrors` and return `FeffError::Validation` for consistent API error handling.
 - For CLI/API mode flags, centralize parsing in `crates/feff85exafs-core/src/mode.rs` and return field-specific `FeffError::Validation` issues instead of free-form argument errors.
 - Keep legacy-compatibility orchestration rules in `crates/feff85exafs-core/src/legacy.rs`; legacy baseline validation should require canonical legacy outputs (`feff.inp`, `files.dat`, `paths.dat`, `xmu.dat`, `chi.dat`, `f85e.log`, and at least one `feffNNNN.dat`).
+- Keep typed execution entrypoints in `crates/feff85exafs-core/src/api.rs` and make `src/main.rs` a thin argument-to-request adapter so CLI and library behavior stay in sync.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -110,4 +111,17 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - The legacy `f85e` script infers the module root from a strict `bin/f85e -> src/*` path layout; integration tests must mirror that layout exactly.
   - Useful context (e.g., "the evaluation panel is in component X")
     - A lightweight mocked `src/{RDINP,POT,XSPH,PATH,GENFMT,FF2X}` tree is sufficient to test unchanged legacy automation behavior without building Fortran binaries.
+---
+## 2026-02-16 04:41:43 JST - US-009
+- Added a modern typed execution API in `feff85exafs-core` by introducing `api::run(RunRequest) -> Result<RunSuccess>` with structured request/operation/result models for baseline execution.
+- Refactored the CLI baseline path to call the shared core API entrypoint so command execution and library execution share identical behavior.
+- Added compile-checked rustdoc examples for the modern API entrypoint (success and structured validation error flows), plus unit tests for structured success and validation failures.
+- Files changed: `crates/feff85exafs-core/src/api.rs`, `crates/feff85exafs-core/src/lib.rs`, `src/main.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Keep new execution capabilities behind `RunOperation` variants in `api.rs` and route CLI handlers through that entrypoint instead of duplicating orchestration logic.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Unit tests in workspace crates should resolve corpus fixture paths from `env!(\"CARGO_MANIFEST_DIR\")` to avoid brittle relative-path failures when test binaries run from crate directories.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - `cargo test --workspace` now includes doctests for `api::run`, so rustdoc code snippets act as compile gates for API documentation.
 ---
