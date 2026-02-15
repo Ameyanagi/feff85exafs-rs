@@ -1,0 +1,18 @@
+# Ralph Progress Log
+## Codebase Patterns
+- Use `feff85exafs/src/*/Makefile` and `feff85exafs/src/*/SConstruct` as the canonical source for module dependency mapping; `README` files are descriptive but less precise for direct build deps.
+- The core execution chain for this project is fixed as `rdinp -> pot -> xsph -> pathfinder -> genfmt -> ff2x`; treat other modules as supporting or non-core unless a story explicitly expands scope.
+
+Started: Mon Feb 16 03:58:44 JST 2026
+---
+## 2026-02-16 04:00:57 JST - US-001
+- Created `docs/migration/module-map.md` with a full legacy module inventory and direct dependency map, including the required core stage order.
+- Files changed: `docs/migration/module-map.md`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Dependency truth for legacy modules lives in both Makefile and SConstruct files under `feff85exafs/src/`; use both when planning migration steps.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Ralph tracking artifacts are under `scripts/ralph/` in this repository, not the repo root.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - `POT` and `XSPH` have the widest direct dependency surface among core stages and are likely to be the highest-risk integration boundaries during Rust porting.
+---

@@ -1,0 +1,370 @@
+{
+  "project": "feff85exafs-rs",
+  "branchName": "ralph/feff85exafs-rust-migration",
+  "description": "Phased migration of feff85exafs to Rust with a modern API, optional legacy compatibility mode, and strict parity/performance gates.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create module inventory and dependency map",
+      "description": "As a maintainer, I want a complete module/dependency map so migration work can be sequenced safely.",
+      "acceptanceCriteria": [
+        "Create docs/migration/module-map.md listing all modules and direct dependencies",
+        "Document stage order rdinp -> pot -> xsph -> pathfinder -> genfmt -> ff2x",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Define Phase 1 core scope and release gates",
+      "description": "As a release owner, I want explicit core workflow scope and gates so Phase 1 completion is objective.",
+      "acceptanceCriteria": [
+        "Create docs/migration/phase1-scope.md with core and non-core module lists",
+        "Define feature parity and test parity gates for each core workflow",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Add baseline corpus runner for noSCF cases",
+      "description": "As a developer, I want reproducible noSCF baseline outputs so parity checks have a stable reference.",
+      "acceptanceCriteria": [
+        "Add tooling to generate noSCF baseline outputs from existing test materials",
+        "Store baseline artifacts in a versioned folder with deterministic naming",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Extend baseline corpus runner for SCF cases",
+      "description": "As a developer, I want SCF baselines captured so parity checks cover both execution variants.",
+      "acceptanceCriteria": [
+        "Generate SCF baseline outputs for the same reference materials used in noSCF",
+        "Document the command and environment required to regenerate SCF baselines",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Scaffold Rust workspace crates",
+      "description": "As a developer, I want a Rust workspace layout so migration code has clear boundaries.",
+      "acceptanceCriteria": [
+        "Create workspace crates for core engine, CLI, and shared error types",
+        "Wire cargo workspace configuration and build all crates",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Implement shared domain model",
+      "description": "As a developer, I want typed domain structs so modules can exchange validated data safely.",
+      "acceptanceCriteria": [
+        "Define Rust types for run config, parsed input cards, and output metadata",
+        "Add serialization and validation for shared types",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Add mode selection plumbing",
+      "description": "As a user, I want to choose legacy or modern mode so I can keep compatibility or use new APIs.",
+      "acceptanceCriteria": [
+        "Add CLI flag --mode with values legacy and modern",
+        "Expose RunMode selection in library API",
+        "Invalid mode values return structured errors",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Implement legacy orchestration mode",
+      "description": "As a legacy user, I want exact stage orchestration so existing scripts continue working unchanged.",
+      "acceptanceCriteria": [
+        "Legacy mode executes stages in historical order with historical default behavior",
+        "Legacy mode produces expected legacy file names for baseline runs",
+        "Add integration test that runs one existing automation path unchanged",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Add modern API execution entrypoint",
+      "description": "As a Rust integrator, I want a typed execution entrypoint so I can call feff85exafs without shell wrappers.",
+      "acceptanceCriteria": [
+        "Expose a Rust run() entrypoint returning structured success and error results",
+        "Provide API examples in docs that compile",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Support file-based and in-memory config in modern API",
+      "description": "As a Rust integrator, I want both config styles so integration can avoid temporary files when needed.",
+      "acceptanceCriteria": [
+        "Modern API accepts both file-path input and in-memory run configuration",
+        "Add tests for both configuration paths",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Port RDINP parser to Rust",
+      "description": "As a developer, I want RDINP parsing in Rust so the pipeline starts natively with validated input data.",
+      "acceptanceCriteria": [
+        "Parse all input cards required by the agreed Phase 1 core corpus",
+        "Return typed parse errors for malformed cards and unsupported values",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Add RDINP parity tests",
+      "description": "As a maintainer, I want RDINP parity checks so Rust parser output is provably compatible.",
+      "acceptanceCriteria": [
+        "Compare RDINP intermediate outputs against legacy baseline for core materials",
+        "Fail tests when differences exceed defined tolerance rules",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Implement POT Rust adapter layer",
+      "description": "As a developer, I want POT data and I/O adapters in Rust so POT can be incrementally ported.",
+      "acceptanceCriteria": [
+        "Implement typed POT input and output structures and file translation",
+        "Add unit tests for POT adapter serialization and parsing",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Port POT compute path with parity",
+      "description": "As a maintainer, I want POT computations in Rust so core pipeline execution no longer depends on legacy POT.",
+      "acceptanceCriteria": [
+        "Run POT in Rust for Phase 1 core materials and produce required POT artifacts",
+        "Parity checks against baseline pass within configured tolerances",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Port XSPH module with parity",
+      "description": "As a maintainer, I want XSPH in Rust so core workflow stages can execute natively.",
+      "acceptanceCriteria": [
+        "Implement XSPH stage in Rust for Phase 1 core materials",
+        "XSPH outputs match baseline within configured tolerances",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Port pathfinder module with parity",
+      "description": "As a maintainer, I want pathfinder in Rust so path generation is part of the native pipeline.",
+      "acceptanceCriteria": [
+        "Implement pathfinder stage in Rust for Phase 1 core materials",
+        "Path outputs match baseline within configured tolerances",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Port GENFMT module with parity",
+      "description": "As a maintainer, I want GENFMT in Rust so formatted outputs are generated natively.",
+      "acceptanceCriteria": [
+        "Implement GENFMT stage in Rust for Phase 1 core materials",
+        "GENFMT outputs match baseline within configured tolerances",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Port FF2X module and complete core end-to-end run",
+      "description": "As a release owner, I want FF2X in Rust so all Phase 1 core stages run end-to-end natively.",
+      "acceptanceCriteria": [
+        "Implement FF2X stage in Rust for Phase 1 core materials",
+        "End-to-end core workflow runs in modern mode without legacy module fallbacks",
+        "Core workflow outputs match baseline within configured tolerances",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Add parity report command and CI gate",
+      "description": "As a maintainer, I want automated parity reporting so regressions are caught in CI.",
+      "acceptanceCriteria": [
+        "Add a command that reports per-file numeric deltas versus baseline",
+        "CI fails when unapproved parity regressions are detected",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-020",
+      "title": "Add performance benchmark harness",
+      "description": "As a maintainer, I want benchmark automation so performance improvements are measurable and enforceable.",
+      "acceptanceCriteria": [
+        "Add repeatable benchmark command comparing Rust and legacy runs on core corpus",
+        "Produce machine-readable benchmark output for CI trend tracking",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-021",
+      "title": "Add legacy compatibility integration suite",
+      "description": "As a legacy user, I want compatibility tests so existing scripts remain supported via legacy mode.",
+      "acceptanceCriteria": [
+        "Add integration tests that execute representative legacy workflows unchanged",
+        "Document known compatibility exceptions explicitly if any exist",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-022",
+      "title": "Port DEBYE module with parity",
+      "description": "As a maintainer, I want DEBYE in Rust so full-Rust workflow coverage can be achieved.",
+      "acceptanceCriteria": [
+        "Implement DEBYE module in Rust for legacy-supported inputs",
+        "DEBYE outputs match baseline within configured tolerances",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-023",
+      "title": "Port EXCH module with parity",
+      "description": "As a maintainer, I want EXCH in Rust so non-core legacy dependencies are removed.",
+      "acceptanceCriteria": [
+        "Implement EXCH module in Rust for legacy-supported inputs",
+        "EXCH outputs match baseline within configured tolerances",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-024",
+      "title": "Port FOVRG module with parity",
+      "description": "As a maintainer, I want FOVRG in Rust so full migration can run without legacy executables.",
+      "acceptanceCriteria": [
+        "Implement FOVRG module in Rust for legacy-supported inputs",
+        "FOVRG outputs match baseline within configured tolerances",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-025",
+      "title": "Enable full-Rust execution with optional legacy mode",
+      "description": "As a maintainer, I want pure Rust execution for all workflows while retaining optional legacy mode.",
+      "acceptanceCriteria": [
+        "All workflows execute in modern mode without mandatory legacy binaries",
+        "Legacy mode remains available behind explicit mode selection",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-026",
+      "title": "Publish legacy-to-modern migration guide",
+      "description": "As an integrator, I want migration documentation so I can adopt the modern API with predictable behavior.",
+      "acceptanceCriteria": [
+        "Create docs/migration/legacy-to-modern.md mapping legacy interfaces to modern API usage",
+        "Document compatibility mode behavior, known differences, and recommended defaults",
+        "Typecheck passes"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
