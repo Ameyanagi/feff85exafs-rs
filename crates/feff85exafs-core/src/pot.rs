@@ -73,6 +73,7 @@ pub struct PotInputData {
     pub jumprm: i32,
     pub nohole: i32,
     pub iplsmn: i32,
+    pub rpath: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -138,6 +139,8 @@ struct LegacyPotInputFile {
     nohole: i32,
     #[serde(default)]
     iplsmn: i32,
+    #[serde(default = "default_rpath")]
+    rpath: f64,
 }
 
 impl PotInputData {
@@ -223,6 +226,9 @@ impl PotInputData {
         if !matches!(self.ispin, 0 | 1) {
             errors.push("ispin", "must be 0 or 1");
         }
+        if !self.rpath.is_finite() || self.rpath <= 0.0 {
+            errors.push("rpath", "must be a finite value > 0");
+        }
 
         finish_validation(errors)
     }
@@ -253,6 +259,15 @@ impl PotInputData {
                 }
                 "SCF" => {
                     scf_values = Some(card.values.clone());
+                }
+                "RPATH" => {
+                    let Some(value) = card.values.first() else {
+                        return Err(validation_error(
+                            format!("cards[{card_index}].values"),
+                            "RPATH card must include one value",
+                        ));
+                    };
+                    input.rpath = parse_f64_value(value, format!("cards[{card_index}].values[0]"))?;
                 }
                 "EXCHANGE" => {
                     exchange_values = Some(card.values.clone());
@@ -472,6 +487,7 @@ impl PotInputData {
             jumprm: 0,
             nohole: -1,
             iplsmn: 0,
+            rpath: default_rpath(),
         }
     }
 }
@@ -589,6 +605,7 @@ impl LegacyPotInputFile {
             jumprm: self.jumprm,
             nohole: self.nohole,
             iplsmn: self.iplsmn,
+            rpath: self.rpath,
         };
         typed.validate()?;
         Ok(typed)
@@ -696,6 +713,7 @@ impl LegacyPotInputFile {
             jumprm: input.jumprm,
             nohole: input.nohole,
             iplsmn: input.iplsmn,
+            rpath: input.rpath,
         })
     }
 }
@@ -1018,6 +1036,10 @@ fn parse_f64_value(value: &str, field: impl Into<String>) -> Result<f64> {
             format!("invalid numeric value `{value}` for POT translation"),
         )
     })
+}
+
+fn default_rpath() -> f64 {
+    5.0
 }
 
 fn is_potential_data_file(file_name: &str) -> bool {
