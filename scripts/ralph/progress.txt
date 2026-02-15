@@ -10,6 +10,7 @@
 - For CLI/API mode flags, centralize parsing in `crates/feff85exafs-core/src/mode.rs` and return field-specific `FeffError::Validation` issues instead of free-form argument errors.
 - Keep legacy-compatibility orchestration rules in `crates/feff85exafs-core/src/legacy.rs`; legacy baseline validation should require canonical legacy outputs (`feff.inp`, `files.dat`, `paths.dat`, `xmu.dat`, `chi.dat`, `f85e.log`, and at least one `feffNNNN.dat`).
 - Keep typed execution entrypoints in `crates/feff85exafs-core/src/api.rs` and make `src/main.rs` a thin argument-to-request adapter so CLI and library behavior stay in sync.
+- For modern API config handling, keep request execution in `api::run(RunRequest)` and route alternate config sources through `api::run_with_config(...)` / `api::run_from_file(...)` to avoid duplicating operation logic.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -124,4 +125,17 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - Unit tests in workspace crates should resolve corpus fixture paths from `env!(\"CARGO_MANIFEST_DIR\")` to avoid brittle relative-path failures when test binaries run from crate directories.
   - Useful context (e.g., "the evaluation panel is in component X")
     - `cargo test --workspace` now includes doctests for `api::run`, so rustdoc code snippets act as compile gates for API documentation.
+---
+## 2026-02-16 04:45:21 JST - US-010
+- Added modern API config-source support in `api.rs` with `RunConfigInput`, `run_with_config(...)`, and `run_from_file(...)` so callers can execute from in-memory requests or file-based JSON configs.
+- Kept `api::run(RunRequest)` as the single execution path and refactored shared operation execution behind an internal helper to avoid behavior drift between config sources.
+- Added unit tests covering both config paths (in-memory and file-based) plus config-path validation errors.
+- Files changed: `crates/feff85exafs-core/src/api.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Add new API input modes as thin adapters that resolve into `RunRequest` and then call `api::run` so business logic remains centralized.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - File-based config support expects JSON shaped like `RunRequest`; parse failures currently surface as `FeffError::InvalidArgument`, while missing/blank path is reported as `FeffError::Validation` on `config.path`.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - `api::run_from_file(...)` is now available for integrations that still produce config files, while direct callers can use `api::run_with_config(RunConfigInput::InMemory { ... })`.
 ---

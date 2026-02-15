@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::Path;
 
 use crate::baseline::{generate_noscf_manifests_for_mode, generate_withscf_manifests_for_mode};
@@ -30,6 +31,13 @@ pub enum RunOperation {
 pub struct RunRequest {
     pub mode: RunMode,
     pub operation: RunOperation,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RunConfigInput {
+    InMemory { request: RunRequest },
+    FilePath { path: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -147,7 +155,23 @@ impl RunRequest {
 /// ```
 pub fn run(request: RunRequest) -> Result<RunSuccess> {
     request.validate()?;
+    execute(request)
+}
 
+/// Execute a typed FEFF85EXAFS operation from either in-memory config data
+/// or a file path to JSON-serialized [`RunRequest`].
+pub fn run_with_config(config: RunConfigInput) -> Result<RunSuccess> {
+    let request = resolve_run_request(config)?;
+    run(request)
+}
+
+/// Execute a typed FEFF85EXAFS operation from a JSON config file.
+pub fn run_from_file(path: impl AsRef<Path>) -> Result<RunSuccess> {
+    let path = path.as_ref().to_string_lossy().into_owned();
+    run_with_config(RunConfigInput::FilePath { path })
+}
+
+fn execute(request: RunRequest) -> Result<RunSuccess> {
     let result = match request.operation {
         RunOperation::Baseline(operation) => {
             RunOperationSuccess::Baseline(run_baseline_operation(&operation, request.mode)?)
@@ -157,6 +181,28 @@ pub fn run(request: RunRequest) -> Result<RunSuccess> {
     Ok(RunSuccess {
         mode: request.mode,
         result,
+    })
+}
+
+fn resolve_run_request(config: RunConfigInput) -> Result<RunRequest> {
+    match config {
+        RunConfigInput::InMemory { request } => Ok(request),
+        RunConfigInput::FilePath { path } => load_request_from_path(&path),
+    }
+}
+
+fn load_request_from_path(path: &str) -> Result<RunRequest> {
+    let mut errors = ValidationErrors::new();
+    validate_non_empty(path, "config.path", &mut errors);
+    if !errors.is_empty() {
+        return Err(FeffError::Validation(errors));
+    }
+
+    let raw = fs::read_to_string(path)?;
+    serde_json::from_str::<RunRequest>(&raw).map_err(|error| {
+        FeffError::InvalidArgument(format!(
+            "failed to parse run config JSON from `{path}`: {error}"
+        ))
     })
 }
 
@@ -259,6 +305,61 @@ mod tests {
 
         if output_root.exists() {
             fs::remove_dir_all(&output_root).expect("should clean temporary output directory");
+        }
+    }
+
+    #[test]
+    fn run_with_config_accepts_in_memory_request() {
+        let output_root = temp_output_root();
+        let request = baseline_request(output_root.to_string_lossy().into_owned());
+
+        let result = run_with_config(RunConfigInput::InMemory { request })
+            .expect("in-memory config run should succeed");
+        let baseline = result
+            .baseline()
+            .expect("baseline run result should be present");
+        assert!(baseline.manifest_count > 0);
+
+        if output_root.exists() {
+            fs::remove_dir_all(&output_root).expect("should clean temporary output directory");
+        }
+    }
+
+    #[test]
+    fn run_from_file_accepts_json_request() {
+        let test_root = temp_output_root();
+        let output_root = test_root.join("out");
+        fs::create_dir_all(&test_root).expect("should create temp test root");
+        let config_path = test_root.join("run-request.json");
+        let request = baseline_request(output_root.to_string_lossy().into_owned());
+        let request_json =
+            serde_json::to_string_pretty(&request).expect("should serialize run request");
+        fs::write(&config_path, format!("{request_json}\n")).expect("should write request config");
+
+        let result = run_from_file(&config_path).expect("file-based config run should succeed");
+        let baseline = result
+            .baseline()
+            .expect("baseline run result should be present");
+        assert!(baseline.manifest_count > 0);
+
+        if test_root.exists() {
+            fs::remove_dir_all(&test_root).expect("should clean temporary test root");
+        }
+    }
+
+    #[test]
+    fn run_with_config_rejects_blank_config_path() {
+        let err = run_with_config(RunConfigInput::FilePath {
+            path: "   ".to_string(),
+        })
+        .expect_err("blank config path should fail validation");
+
+        match err {
+            FeffError::Validation(validation) => {
+                assert_eq!(validation.len(), 1);
+                assert_eq!(validation.issues()[0].field, "config.path");
+            }
+            other => panic!("unexpected error type: {other}"),
         }
     }
 
