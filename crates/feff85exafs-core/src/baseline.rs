@@ -387,7 +387,10 @@ mod tests {
     use std::env;
     use std::io::Write;
     use std::process;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     struct TempDir {
         path: PathBuf,
@@ -395,8 +398,9 @@ mod tests {
 
     impl TempDir {
         fn new() -> io::Result<Self> {
+            let counter = TEMP_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
             let unique = format!(
-                "feff85exafs-rs-baseline-{}-{}",
+                "feff85exafs-rs-baseline-{}-{}-{counter}",
                 process::id(),
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)

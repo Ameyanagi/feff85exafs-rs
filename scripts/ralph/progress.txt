@@ -19,6 +19,8 @@
 - For XSPH parity against legacy corpus fixtures, parse the `f85e.log` XSPH block (`dx=` and `phase shifts for unique potential <ipot>`) because baseline bundles do not preserve standalone XSPH stage files.
 - Keep RDINP `RPATH` available in typed POT/pathfinder inputs; pathfinder parity drifts if `rmax` is inferred from full atom bounds instead of the configured path cutoff.
 - Keep GENFMT stage handoff typed by parsing Rust `pathNNNN.dat` summaries from pathfinder output and validating nearest-shell parity from generated `feffNNNN.dat` headers.
+- FF2X parity should resample Rust `feffNNNN.dat` k-grids to legacy `0.05` spacing before comparing `chi.dat`/`xmu.dat` signatures against baseline fixtures.
+- Test temp directories should include an atomic suffix in addition to timestamp/PID to avoid collisions when `cargo test --workspace` runs tests in parallel.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -236,4 +238,17 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - Full path-list parity is noisier than nearest-shell parity with the current Rust pathfinder abstraction, so GENFMT parity checks should compare nearest-shell signatures from `feffNNNN.dat`.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Core corpus parity now validates POT -> XSPH -> pathfinder -> GENFMT chaining for all 16 baseline fixtures, providing FEFF-path artifacts for upcoming FF2X work.
+---
+## 2026-02-16 05:43:25 JST - US-018
+- Implemented native Rust FF2X execution in `crates/feff85exafs-core/src/ff2x.rs` with typed `Ff2xInputData`/`Ff2xOutputData`, stage handoff from GENFMT (`from_previous_stages`), and deterministic `chi.dat`/`xmu.dat` artifact generation from Rust `feffNNNN.dat` path data.
+- Added corpus-scale FF2X tests for all 16 Phase 1 fixtures covering artifact creation, modern native end-to-end execution (`rdinp -> pot -> xsph -> pathfinder -> genfmt -> ff2x`) without legacy fallbacks, and legacy parity signatures for `chi.dat`/`xmu.dat`.
+- Stabilized parallel test execution by hardening baseline test temp directory naming with an atomic suffix in `crates/feff85exafs-core/src/baseline.rs`.
+- Files changed: `crates/feff85exafs-core/src/ff2x.rs`, `crates/feff85exafs-core/src/lib.rs`, `crates/feff85exafs-core/src/baseline.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - FF2X stage construction is cleanest when it consumes validated GENFMT typed artifacts and performs its own deterministic `k`-grid resampling before writing final outputs.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Legacy `chi.dat`/`xmu.dat` fixture resolutions vary slightly by case (400 vs 401 rows), so parity assertions should tolerate small row-count drift while enforcing signature-level checks.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - The complete Rust-native core chain now executes across all 16 corpus fixtures and emits final EXAFS artifacts (`chi.dat`, `xmu.dat`) without invoking legacy automation scripts.
 ---

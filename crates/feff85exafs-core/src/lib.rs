@@ -1,6 +1,7 @@
 pub mod api;
 pub mod baseline;
 pub mod domain;
+pub mod ff2x;
 pub mod genfmt;
 pub mod legacy;
 pub mod mode;
