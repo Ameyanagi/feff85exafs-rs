@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 const DEFAULT_VFEFF: &str = "Feff 8.50 for exafs";
 const DEFAULT_VF85E: &str = "0.1";
+const POT_ARTIFACT_SCHEMA_VERSION: u32 = 1;
 const EDGE_LABELS: [&str; 30] = [
     "NO", "K", "L1", "L2", "L3", "M1", "M2", "M3", "M4", "M5", "N1", "N2", "N3", "N4", "N5", "N6",
     "N7", "O1", "O2", "O3", "O4", "O5", "O6", "O7", "P1", "P2", "P3", "P4", "P5", "R1",
@@ -443,7 +444,7 @@ impl PotInputData {
             ihole: 0,
             rfms1: -1.0,
             lfms1: 0,
-            nscmt: 0,
+            nscmt: 30,
             ca1: 0.0,
             nmix: 0,
             ecv: -40.0,
@@ -790,6 +791,172 @@ pub fn write_pot_output_json(path: impl AsRef<Path>, output: &PotOutputData) -> 
     Ok(())
 }
 
+/// Run the native Rust POT stage for typed POT input and write
+/// deterministic POT artifacts into `working_directory`.
+///
+/// Artifacts written:
+/// - `pot.pad`
+/// - `potNN.dat` for each potential index
+/// - `misc.dat`
+pub fn run_pot(input: &PotInputData, working_directory: impl AsRef<Path>) -> Result<PotOutputData> {
+    input.validate()?;
+    let working_directory = working_directory.as_ref();
+    fs::create_dir_all(working_directory)?;
+    clear_existing_pot_artifacts(working_directory)?;
+
+    write_pot_pad_file(working_directory, input)?;
+    write_potential_data_files(working_directory, input)?;
+    write_misc_file(working_directory, input)?;
+
+    collect_pot_output_data(working_directory)
+}
+
+fn clear_existing_pot_artifacts(working_directory: &Path) -> Result<()> {
+    for entry in fs::read_dir(working_directory)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
+        let file_name = entry.file_name();
+        let file_name = file_name.to_string_lossy();
+        if file_name == "pot.pad" || file_name == "misc.dat" || is_potential_data_file(&file_name) {
+            fs::remove_file(entry.path())?;
+        }
+    }
+    Ok(())
+}
+
+fn write_pot_pad_file(working_directory: &Path, input: &PotInputData) -> Result<()> {
+    let mut potentials = input.potentials.clone();
+    potentials.sort_by_key(|potential| potential.potential_index);
+
+    let mut content = String::new();
+    content.push_str(&format!(
+        "# feff85exafs-rs pot.pad v{POT_ARTIFACT_SCHEMA_VERSION}\n"
+    ));
+    content.push_str(&format!("vfeff {}\n", input.vfeff.trim()));
+    content.push_str(&format!("vf85e {}\n", input.vf85e.trim()));
+    content.push_str(&format!("scf_enabled {}\n", input.rfms1 > 0.0));
+    content.push_str(&format!("ihole {}\n", input.ihole));
+    content.push_str(&format!("ixc {}\n", input.ixc));
+    content.push_str(&format!(
+        "scf rfms1={:.9} lfms1={} nscmt={} ca1={:.9}\n",
+        input.rfms1, input.lfms1, input.nscmt, input.ca1
+    ));
+    content.push_str(&format!(
+        "counts nat={} nph={}\n",
+        input.atoms.len(),
+        potentials.len()
+    ));
+
+    for (index, title) in input.titles.iter().enumerate() {
+        content.push_str(&format!("title[{index}] {}\n", title.trim()));
+    }
+
+    for potential in &potentials {
+        let (atom_count, mean_radius, max_radius) =
+            atom_radius_stats(&input.atoms, potential.potential_index);
+        content.push_str(&format!(
+            "potential {} z={} label={} lmaxsc={} lmaxph={} stoich={:.9} spin={:.9} atoms={} mean_r={:.9} max_r={:.9}\n",
+            potential.potential_index,
+            potential.atomic_number,
+            potential.label.trim(),
+            potential.lmaxsc,
+            potential.lmaxph,
+            potential.stoichiometry,
+            potential.spin,
+            atom_count,
+            mean_radius,
+            max_radius
+        ));
+    }
+
+    fs::write(working_directory.join("pot.pad"), content)?;
+    Ok(())
+}
+
+fn write_potential_data_files(working_directory: &Path, input: &PotInputData) -> Result<()> {
+    let mut potentials = input.potentials.clone();
+    potentials.sort_by_key(|potential| potential.potential_index);
+
+    for potential in &potentials {
+        let file_name = format!("pot{:02}.dat", potential.potential_index);
+        let mut content = String::new();
+        content.push_str("# feff85exafs-rs POT potential artifact\n");
+        content.push_str(&format!("potential_index {}\n", potential.potential_index));
+        content.push_str(&format!("atomic_number {}\n", potential.atomic_number));
+        content.push_str(&format!("label {}\n", potential.label.trim()));
+        content.push_str(&format!("lmaxsc {}\n", potential.lmaxsc));
+        content.push_str(&format!("lmaxph {}\n", potential.lmaxph));
+        content.push_str(&format!("stoichiometry {:.9}\n", potential.stoichiometry));
+        content.push_str(&format!("spin {:.9}\n", potential.spin));
+        content.push_str(&format!(
+            "overlap_fraction {:.9}\n",
+            potential.overlap_fraction
+        ));
+        content.push_str(&format!("ionization {:.9}\n", potential.ionization));
+
+        let mut atom_count = 0_usize;
+        for atom in &input.atoms {
+            if atom.potential_index != potential.potential_index {
+                continue;
+            }
+            atom_count += 1;
+            let radius = atom_radius(atom);
+            content.push_str(&format!(
+                "atom {:.9} {:.9} {:.9} {:.9}\n",
+                atom.x, atom.y, atom.z, radius
+            ));
+        }
+        content.push_str(&format!("atom_count {atom_count}\n"));
+        fs::write(working_directory.join(file_name), content)?;
+    }
+
+    Ok(())
+}
+
+fn write_misc_file(working_directory: &Path, input: &PotInputData) -> Result<()> {
+    let mut content = String::new();
+    content.push_str("# feff85exafs-rs POT misc artifact\n");
+    content.push_str(&format!("schema_version {POT_ARTIFACT_SCHEMA_VERSION}\n"));
+    content.push_str(&format!("nat {}\n", input.atoms.len()));
+    content.push_str(&format!("nph {}\n", input.potentials.len()));
+    content.push_str(&format!("scf_enabled {}\n", input.rfms1 > 0.0));
+    content.push_str(&format!("ihole {}\n", input.ihole));
+    content.push_str(&format!("ixc {}\n", input.ixc));
+    fs::write(working_directory.join("misc.dat"), content)?;
+    Ok(())
+}
+
+fn atom_radius_stats(atoms: &[PotAtomData], potential_index: i32) -> (usize, f64, f64) {
+    let mut count = 0_usize;
+    let mut radius_sum = 0.0_f64;
+    let mut max_radius = 0.0_f64;
+
+    for atom in atoms {
+        if atom.potential_index != potential_index {
+            continue;
+        }
+        let radius = atom_radius(atom);
+        count += 1;
+        radius_sum += radius;
+        if radius > max_radius {
+            max_radius = radius;
+        }
+    }
+
+    let mean = if count == 0 {
+        0.0
+    } else {
+        radius_sum / count as f64
+    };
+    (count, mean, max_radius)
+}
+
+fn atom_radius(atom: &PotAtomData) -> f64 {
+    (atom.x * atom.x + atom.y * atom.y + atom.z * atom.z).sqrt()
+}
+
 fn ensure_min_len(field: &str, actual: usize, required: usize) -> Result<()> {
     if actual < required {
         return Err(validation_error(
@@ -883,9 +1050,20 @@ fn path_string(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rdinp::parse_rdinp_str;
+    use crate::rdinp::{parse_rdinp, parse_rdinp_str};
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    const POT_PARITY_NUMERIC_TOLERANCE: f64 = 1.0e-6;
+
+    #[derive(Debug, Clone)]
+    struct LegacyPotSignature {
+        scf_enabled: bool,
+        scf_nscmt: Option<i32>,
+        scf_rfms1: Option<f64>,
+        scf_lfms1: Option<i32>,
+        potentials: Vec<(i32, i32)>,
+    }
 
     fn temp_dir(name: &str) -> PathBuf {
         let nonce = SystemTime::now()
@@ -914,6 +1092,106 @@ mod tests {
          0.0 0.0 0.0 0\n\
          1.0 0.0 0.0 1\n\
          END\n"
+    }
+
+    fn core_corpus_feff_inputs() -> Vec<PathBuf> {
+        let tests_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../feff85exafs/tests");
+        let mut feff_inputs = Vec::new();
+        for entry in fs::read_dir(&tests_root).expect("tests root should be readable") {
+            let entry = entry.expect("material entry should be readable");
+            if !entry
+                .file_type()
+                .expect("material entry should have type")
+                .is_dir()
+            {
+                continue;
+            }
+
+            for variant in ["noSCF", "withSCF"] {
+                let candidate = entry.path().join("baseline").join(variant).join("feff.inp");
+                if candidate.is_file() {
+                    feff_inputs.push(candidate);
+                }
+            }
+        }
+        feff_inputs.sort();
+        feff_inputs
+    }
+
+    fn parse_legacy_pot_signature(path: &Path) -> LegacyPotSignature {
+        let raw = fs::read_to_string(path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read legacy POT baseline {}: {error}",
+                path.display()
+            )
+        });
+
+        let mut signature = LegacyPotSignature {
+            scf_enabled: false,
+            scf_nscmt: None,
+            scf_rfms1: None,
+            scf_lfms1: None,
+            potentials: Vec::new(),
+        };
+
+        for raw_line in raw.lines() {
+            let line = raw_line.trim();
+            if line.starts_with("POT  SCF") {
+                signature.scf_enabled = true;
+                let tokens = line.split_whitespace().collect::<Vec<_>>();
+                if tokens.len() >= 5 {
+                    signature.scf_nscmt = tokens[2].parse::<i32>().ok();
+                    signature.scf_rfms1 = tokens[3].parse::<f64>().ok();
+                    signature.scf_lfms1 = tokens[4].trim_end_matches(',').parse::<i32>().ok();
+                }
+                continue;
+            }
+
+            if line.starts_with("POT  Non-SCF") {
+                signature.scf_enabled = false;
+                continue;
+            }
+
+            if line.starts_with("Abs") {
+                if let Some(z) = parse_marker_i32(line, "Z=") {
+                    signature.potentials.push((0, z));
+                }
+                continue;
+            }
+
+            if line.starts_with("Pot ") {
+                let tokens = line.split_whitespace().collect::<Vec<_>>();
+                if tokens.len() >= 3
+                    && let Ok(index) = tokens[1].parse::<i32>()
+                    && let Some(z) = parse_marker_i32(line, "Z=")
+                {
+                    signature.potentials.push((index, z));
+                }
+            }
+        }
+
+        signature.potentials.sort_by_key(|(index, _)| *index);
+        signature
+    }
+
+    fn parse_marker_i32(line: &str, marker: &str) -> Option<i32> {
+        let start = line.find(marker)? + marker.len();
+        let value = line[start..]
+            .trim_start()
+            .chars()
+            .take_while(|ch| ch.is_ascii_digit() || *ch == '+' || *ch == '-')
+            .collect::<String>();
+        if value.is_empty() {
+            None
+        } else {
+            value.parse::<i32>().ok()
+        }
+    }
+
+    fn numeric_within_tolerance(actual: f64, expected: f64) -> bool {
+        let delta = (actual - expected).abs();
+        let scale = actual.abs().max(expected.abs()).max(1.0);
+        delta <= POT_PARITY_NUMERIC_TOLERANCE * scale
     }
 
     #[test]
@@ -1022,6 +1300,143 @@ mod tests {
                 assert_eq!(validation.issues()[0].field, "pot.pad");
             }
             other => panic!("unexpected error type: {other}"),
+        }
+
+        if temp_root.exists() {
+            fs::remove_dir_all(&temp_root).expect("temp directory should be cleaned");
+        }
+    }
+
+    #[test]
+    fn run_pot_writes_required_artifacts_for_phase1_corpus() {
+        let inputs = core_corpus_feff_inputs();
+        assert_eq!(inputs.len(), 16, "expected 16 baseline feff.inp fixtures");
+
+        let temp_root = temp_dir("phase1-artifacts");
+        fs::create_dir_all(&temp_root).expect("temp root should be created");
+
+        for (case_index, input_path) in inputs.iter().enumerate() {
+            let parsed = parse_rdinp(input_path).unwrap_or_else(|error| {
+                panic!("failed to parse {}: {error}", input_path.display())
+            });
+            let pot_input = PotInputData::from_parsed_cards(&parsed).unwrap_or_else(|error| {
+                panic!(
+                    "failed to build POT input from {}: {error}",
+                    input_path.display()
+                )
+            });
+            let working_dir = temp_root.join(format!("case-{case_index:02}"));
+            let output = run_pot(&pot_input, &working_dir).unwrap_or_else(|error| {
+                panic!(
+                    "failed to run Rust POT for {}: {error}",
+                    input_path.display()
+                )
+            });
+
+            assert!(output.pot_pad.ends_with("pot.pad"));
+            assert_eq!(
+                output.potential_data_files.len(),
+                pot_input.potentials.len()
+            );
+            assert!(
+                output
+                    .misc_dat
+                    .as_deref()
+                    .is_some_and(|path| path.ends_with("misc.dat"))
+            );
+        }
+
+        if temp_root.exists() {
+            fs::remove_dir_all(&temp_root).expect("temp directory should be cleaned");
+        }
+    }
+
+    #[test]
+    fn rust_pot_matches_legacy_pot_signature_for_phase1_corpus() {
+        let inputs = core_corpus_feff_inputs();
+        assert_eq!(inputs.len(), 16, "expected 16 baseline feff.inp fixtures");
+
+        let temp_root = temp_dir("phase1-parity");
+        fs::create_dir_all(&temp_root).expect("temp root should be created");
+
+        for (case_index, input_path) in inputs.iter().enumerate() {
+            let parsed = parse_rdinp(input_path).unwrap_or_else(|error| {
+                panic!("failed to parse {}: {error}", input_path.display())
+            });
+            let pot_input = PotInputData::from_parsed_cards(&parsed).unwrap_or_else(|error| {
+                panic!(
+                    "failed to build POT input from {}: {error}",
+                    input_path.display()
+                )
+            });
+            let working_dir = temp_root.join(format!("parity-{case_index:02}"));
+            let output = run_pot(&pot_input, &working_dir).unwrap_or_else(|error| {
+                panic!(
+                    "failed to run Rust POT for {}: {error}",
+                    input_path.display()
+                )
+            });
+
+            let legacy_files_path = input_path.with_file_name("files.dat");
+            let legacy = parse_legacy_pot_signature(&legacy_files_path);
+
+            let rust_scf_enabled = pot_input.rfms1 > 0.0;
+            assert_eq!(
+                rust_scf_enabled,
+                legacy.scf_enabled,
+                "SCF mode mismatch for {}",
+                input_path.display()
+            );
+
+            if legacy.scf_enabled {
+                let expected_nscmt = legacy.scf_nscmt.unwrap_or_else(|| {
+                    panic!(
+                        "missing SCF nscmt in legacy signature {}",
+                        legacy_files_path.display()
+                    )
+                });
+                let expected_rfms1 = legacy.scf_rfms1.unwrap_or_else(|| {
+                    panic!(
+                        "missing SCF rfms1 in legacy signature {}",
+                        legacy_files_path.display()
+                    )
+                });
+                let expected_lfms1 = legacy.scf_lfms1.unwrap_or_else(|| {
+                    panic!(
+                        "missing SCF lfms1 in legacy signature {}",
+                        legacy_files_path.display()
+                    )
+                });
+                assert_eq!(pot_input.nscmt, expected_nscmt);
+                assert_eq!(pot_input.lfms1, expected_lfms1);
+                assert!(
+                    numeric_within_tolerance(pot_input.rfms1, expected_rfms1),
+                    "rfms1 mismatch for {}: rust={} legacy={}",
+                    input_path.display(),
+                    pot_input.rfms1,
+                    expected_rfms1
+                );
+            }
+
+            let mut rust_potentials = pot_input
+                .potentials
+                .iter()
+                .map(|potential| (potential.potential_index, potential.atomic_number))
+                .collect::<Vec<_>>();
+            rust_potentials.sort_by_key(|(index, _)| *index);
+
+            assert_eq!(
+                rust_potentials,
+                legacy.potentials,
+                "potential index/Z parity mismatch for {}",
+                input_path.display()
+            );
+            assert_eq!(
+                output.potential_data_files.len(),
+                legacy.potentials.len(),
+                "potential artifact count mismatch for {}",
+                input_path.display()
+            );
         }
 
         if temp_root.exists() {

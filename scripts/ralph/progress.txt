@@ -14,6 +14,8 @@
 - RDINP parser validation should use the corpus fixtures at `feff85exafs/tests/*/baseline/{noSCF,withSCF}/feff.inp`, and workspace-crate tests should resolve those fixtures via `env!("CARGO_MANIFEST_DIR")`.
 - RDINP parity tests should compare parsed card streams against a legacy-style token stream derived from baseline `feff.inp` fixtures, enforcing exact card order/count with numeric tolerance (`1e-9` scaled) and case-insensitive text matching.
 - POT adapter JSON compatibility should preserve legacy key names `vro`/`vio` (while accepting `vr0`/`vi0` aliases) and treat missing `iplsmn` as default `0` when ingesting existing `libpotph.json` files.
+- POT stage defaults should preserve legacy SCF behavior when `SCF` cards only provide radius (`rfms1`): keep `lfms1=0` and `nscmt=30` unless explicitly provided by input values.
+- For POT parity against legacy corpus fixtures, parse `files.dat` POT headers as the compatibility signature and accept both compact (`Z=29`) and spaced (`Z= 29`) numeric formatting.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -179,4 +181,17 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - Existing legacy `libpotph.json` fixtures use `vro`/`vio` keys and may omit `iplsmn`; serde adapters should support these compatibility quirks to avoid brittle ingestion.
   - Useful context (e.g., "the evaluation panel is in component X")
     - POT adapter tests now cover three paths: fixture parsing roundtrip, RDINP-to-POT translation, and filesystem output discovery/manifest roundtrip.
+---
+## 2026-02-16 05:09:58 JST - US-014
+- Implemented native Rust POT execution in `crates/feff85exafs-core/src/pot.rs` with `run_pot(...)`, generating deterministic POT stage artifacts (`pot.pad`, `potNN.dat`, and `misc.dat`) from typed `PotInputData`.
+- Added deterministic artifact handling by clearing stale POT artifacts before each run and writing stable, index-ordered potential outputs for reproducible stage behavior.
+- Added Phase 1 corpus POT coverage tests that run Rust POT across all 16 baseline `feff.inp` fixtures and verify required artifact output plus legacy parity signatures from `files.dat` (SCF mode/radius defaults and potential index->Z mappings with numeric tolerance).
+- Files changed: `crates/feff85exafs-core/src/pot.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Legacy POT parity can be validated incrementally by comparing stable `files.dat` POT header signals before full binary `pot.pad` parity is available.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Legacy `files.dat` formatting is not uniform (`Z=29` vs `Z= 29`), so parity parsers must tolerate optional whitespace after markers.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Core corpus `withSCF` fixtures typically specify only SCF radius in `feff.inp`; legacy-compatible POT defaults still require `nscmt=30` when optional SCF values are omitted.
 ---
