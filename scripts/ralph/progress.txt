@@ -12,6 +12,7 @@
 - Keep typed execution entrypoints in `crates/feff85exafs-core/src/api.rs` and make `src/main.rs` a thin argument-to-request adapter so CLI and library behavior stay in sync.
 - For modern API config handling, keep request execution in `api::run(RunRequest)` and route alternate config sources through `api::run_with_config(...)` / `api::run_from_file(...)` to avoid duplicating operation logic.
 - RDINP parser validation should use the corpus fixtures at `feff85exafs/tests/*/baseline/{noSCF,withSCF}/feff.inp`, and workspace-crate tests should resolve those fixtures via `env!("CARGO_MANIFEST_DIR")`.
+- RDINP parity tests should compare parsed card streams against a legacy-style token stream derived from baseline `feff.inp` fixtures, enforcing exact card order/count with numeric tolerance (`1e-9` scaled) and case-insensitive text matching.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -152,4 +153,16 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - Some corpus fixtures intentionally omit `END`; parser validation should not require it, but must still require non-empty `POTENTIALS` and `ATOMS` sections.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Current Phase 1 baseline corpus contains 16 `feff.inp` fixtures (8 materials x 2 variants), and all parse successfully with the new RDINP implementation.
+---
+## 2026-02-16 04:54:31 JST - US-012
+- Added RDINP parity test coverage that compares Rust parser output cards against a legacy-style card stream reconstructed from each core baseline `feff.inp` fixture (noSCF + withSCF).
+- Defined and enforced parity tolerance rules in tests: exact card order/count, relative numeric tolerance (`1e-9` scaled by value magnitude), and case-insensitive text-token matching.
+- Files changed: `crates/feff85exafs-core/src/rdinp.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Reconstructing legacy parity expectations from raw fixture token streams keeps RDINP parity tests deterministic without needing separate snapshot fixtures.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Parity helpers must preserve section context (`POTENTIALS` vs `ATOMS`) when converting unlabeled data rows into `POTENTIAL`/`ATOM` records, or card-stream alignment fails.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Current parity test exercises all 16 core corpus inputs and emits index-specific mismatch messages (`card[i]`, `value[j]`) for quick regression triage.
 ---

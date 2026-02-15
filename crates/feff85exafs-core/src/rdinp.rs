@@ -534,7 +534,17 @@ fn validation_error(field: impl Into<String>, message: impl Into<String>) -> Fef
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
+
+    const RDINP_NUMERIC_TOLERANCE: f64 = 1.0e-9;
+
+    #[derive(Debug, Clone, Copy, Default)]
+    enum LegacySection {
+        #[default]
+        None,
+        Potentials,
+        Atoms,
+    }
 
     fn core_corpus_feff_inputs() -> Vec<PathBuf> {
         let tests_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../feff85exafs/tests");
@@ -577,6 +587,124 @@ mod tests {
          END\n"
     }
 
+    fn legacy_baseline_card_stream(raw: &str, source: &Path) -> Vec<ParsedCard> {
+        let mut section = LegacySection::default();
+        let mut cards = Vec::new();
+
+        for raw_line in raw.lines() {
+            let trimmed_start = raw_line.trim_start();
+            if trimmed_start.is_empty() || trimmed_start.starts_with('*') {
+                continue;
+            }
+
+            let uncommented = strip_inline_comment(raw_line).trim();
+            if uncommented.is_empty() {
+                continue;
+            }
+
+            let values = uncommented.split_whitespace().collect::<Vec<_>>();
+            if values.is_empty() {
+                continue;
+            }
+
+            let keyword = values[0].to_ascii_uppercase();
+            if is_card_keyword(&keyword) {
+                cards.push(ParsedCard {
+                    keyword: keyword.clone(),
+                    values: values[1..]
+                        .iter()
+                        .map(|value| (*value).to_string())
+                        .collect(),
+                });
+                section = match keyword.as_str() {
+                    "POTENTIALS" => LegacySection::Potentials,
+                    "ATOMS" => LegacySection::Atoms,
+                    _ => LegacySection::None,
+                };
+                continue;
+            }
+
+            let row_keyword = match section {
+                LegacySection::Potentials => "POTENTIAL",
+                LegacySection::Atoms => "ATOM",
+                LegacySection::None => {
+                    panic!(
+                        "legacy baseline {} has data row outside section: `{raw_line}`",
+                        source.display()
+                    )
+                }
+            };
+            cards.push(ParsedCard {
+                keyword: row_keyword.to_string(),
+                values: values.iter().map(|value| (*value).to_string()).collect(),
+            });
+        }
+
+        cards
+    }
+
+    fn numeric_values_within_tolerance(actual: f64, expected: f64) -> bool {
+        let delta = (actual - expected).abs();
+        let scale = actual.abs().max(expected.abs()).max(1.0);
+        delta <= RDINP_NUMERIC_TOLERANCE * scale
+    }
+
+    fn assert_cards_match_legacy_baseline(
+        source: &Path,
+        parsed_cards: &[ParsedCard],
+        legacy_cards: &[ParsedCard],
+    ) {
+        assert_eq!(
+            parsed_cards.len(),
+            legacy_cards.len(),
+            "parity mismatch for {}: card count differs",
+            source.display()
+        );
+
+        for (card_index, (parsed, legacy)) in parsed_cards.iter().zip(legacy_cards).enumerate() {
+            assert_eq!(
+                parsed.keyword,
+                legacy.keyword,
+                "parity mismatch for {} card[{card_index}]: keyword differs",
+                source.display()
+            );
+            assert_eq!(
+                parsed.values.len(),
+                legacy.values.len(),
+                "parity mismatch for {} card[{card_index}] {}: value count differs",
+                source.display(),
+                parsed.keyword
+            );
+
+            for (value_index, (parsed_value, legacy_value)) in
+                parsed.values.iter().zip(legacy.values.iter()).enumerate()
+            {
+                match (parsed_value.parse::<f64>(), legacy_value.parse::<f64>()) {
+                    (Ok(parsed_num), Ok(legacy_num)) => {
+                        assert!(
+                            numeric_values_within_tolerance(parsed_num, legacy_num),
+                            "parity mismatch for {} card[{card_index}] {} value[{value_index}]: numeric delta {} exceeds tolerance {}",
+                            source.display(),
+                            parsed.keyword,
+                            (parsed_num - legacy_num).abs(),
+                            RDINP_NUMERIC_TOLERANCE
+                        );
+                    }
+                    _ => {
+                        assert!(
+                            parsed_value.eq_ignore_ascii_case(legacy_value),
+                            "parity mismatch for {} card[{card_index}] {} value[{value_index}]: `{}` != `{}` (case-insensitive compare)",
+                            source.display(),
+                            parsed.keyword,
+                            parsed_value,
+                            legacy_value
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn parses_phase1_corpus_feff_inputs() {
         let inputs = core_corpus_feff_inputs();
@@ -598,6 +726,23 @@ mod tests {
                     .count()
                     >= 1
             );
+        }
+    }
+
+    #[test]
+    fn parser_matches_legacy_baseline_within_tolerance_for_phase1_corpus() {
+        let inputs = core_corpus_feff_inputs();
+        assert_eq!(inputs.len(), 16, "expected 16 baseline feff.inp fixtures");
+
+        for input in inputs {
+            let parsed = parse_rdinp(&input).unwrap_or_else(|error| {
+                panic!("failed to parse {}: {error}", input.display());
+            });
+            let raw = fs::read_to_string(&input).unwrap_or_else(|error| {
+                panic!("failed to read {}: {error}", input.display());
+            });
+            let legacy_cards = legacy_baseline_card_stream(&raw, &input);
+            assert_cards_match_legacy_baseline(&input, &parsed.cards, &legacy_cards);
         }
     }
 
