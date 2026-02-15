@@ -9,6 +9,7 @@
 - Shared Rust domain models should live in `crates/feff85exafs-core/src/domain.rs` and expose `validate()` methods that collect field issues in `ValidationErrors` and return `FeffError::Validation` for consistent API error handling.
 - For CLI/API mode flags, centralize parsing in `crates/feff85exafs-core/src/mode.rs` and return field-specific `FeffError::Validation` issues instead of free-form argument errors.
 - Keep legacy-compatibility orchestration rules in `crates/feff85exafs-core/src/legacy.rs`; legacy baseline validation should require canonical legacy outputs (`feff.inp`, `files.dat`, `paths.dat`, `xmu.dat`, `chi.dat`, `f85e.log`, and at least one `feffNNNN.dat`).
+- Legacy workflow integration tests should execute the unchanged `feff85exafs/bin/f85e` script from a mirrored `bin/` + `src/<MODULE>/` tree and cover both `noSCF` and `withSCF` fixture inputs.
 - Keep typed execution entrypoints in `crates/feff85exafs-core/src/api.rs` and make `src/main.rs` a thin argument-to-request adapter so CLI and library behavior stay in sync.
 - For modern API config handling, keep request execution in `api::run(RunRequest)` and route alternate config sources through `api::run_with_config(...)` / `api::run_from_file(...)` to avoid duplicating operation logic.
 - RDINP parser validation should use the corpus fixtures at `feff85exafs/tests/*/baseline/{noSCF,withSCF}/feff.inp`, and workspace-crate tests should resolve those fixtures via `env!("CARGO_MANIFEST_DIR")`.
@@ -279,4 +280,16 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - The benchmark CLI needs `serde_json` in the root crate dependencies; even if the core crate already depends on it, the binary crate must declare it when serializing reports.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Benchmark defaults are intentionally lightweight (`iterations=1`, `warmup=0`); CI can raise them via `BENCHMARK_ITERATIONS` / `BENCHMARK_WARMUP_ITERATIONS` in `scripts/ci/benchmark-report.sh`.
+---
+## 2026-02-16 06:04:39 JST - US-021
+- Expanded legacy compatibility coverage into a representative integration suite by running the unchanged `feff85exafs/bin/f85e` workflow against both `noSCF` and `withSCF` corpus fixtures.
+- Added `docs/migration/legacy-compatibility.md` documenting compatibility-suite coverage and explicit known exceptions.
+- Files changed: `tests/legacy_automation_path.rs`, `docs/migration/legacy-compatibility.md`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Legacy compatibility tests are most stable when they reuse real fixture `feff.inp` inputs but mock module executables in a temporary mirrored `bin/` + `src/` tree.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - `f85e` path resolution is layout-sensitive (`bin/f85e` sibling to `src`), so integration tests must preserve that structure exactly or module discovery fails.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - The current automated suite validates unchanged legacy orchestration only for `f85e`; `feff8l.sh` and `feff8l.py` remain documented manual-coverage exceptions.
 ---
