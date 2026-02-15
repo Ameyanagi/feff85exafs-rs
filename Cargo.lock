@@ -66,6 +66,7 @@ version = "0.1.0"
 dependencies = [
  "feff85exafs-core",
  "feff85exafs-errors",
+ "serde_json",
 ]
 
 [[package]]

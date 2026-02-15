@@ -10,3 +10,4 @@ edition = "2024"
 [dependencies]
 feff85exafs-core = { path = "crates/feff85exafs-core" }
 feff85exafs-errors = { path = "crates/feff85exafs-errors" }
+serde_json = "=1.0.140"

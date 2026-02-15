@@ -7,6 +7,7 @@ use std::process;
 use feff85exafs_core::api::{
     BaselineCorpusVariant, BaselineRunRequest, RunOperation, RunRequest, run as run_modern_api,
 };
+use feff85exafs_core::benchmark::{BenchmarkReport, BenchmarkReportRequest};
 use feff85exafs_core::domain::RunMode;
 use feff85exafs_core::legacy::{legacy_stage_name, legacy_stage_order};
 use feff85exafs_core::mode::{parse_run_mode_or_default, run_mode_value};
@@ -17,6 +18,7 @@ use feff85exafs_errors::{FeffError, Result};
 enum CliCommand {
     Baseline(BaselineCommand),
     ParityReport(ParityReportCommand),
+    BenchmarkReport(BenchmarkReportCommand),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -42,6 +44,16 @@ struct ParityReportCommand {
     max_rms_delta: Option<f64>,
     approved_regression_ids: BTreeSet<String>,
     approved_regression_files: Vec<PathBuf>,
+}
+
+#[derive(Debug, Clone)]
+struct BenchmarkReportCommand {
+    tests_root: PathBuf,
+    working_root: PathBuf,
+    legacy_runner: PathBuf,
+    iterations: usize,
+    warmup_iterations: usize,
+    json_output: PathBuf,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -118,6 +130,7 @@ fn run_cli(args: Vec<String>) -> Result<()> {
     match command {
         CliCommand::Baseline(command) => run_baseline_command(command),
         CliCommand::ParityReport(command) => run_parity_report_command(command),
+        CliCommand::BenchmarkReport(command) => run_benchmark_report_command(command),
     }
 }
 
@@ -219,15 +232,46 @@ fn run_parity_report_command(command: ParityReportCommand) -> Result<()> {
     Ok(())
 }
 
+fn run_benchmark_report_command(command: BenchmarkReportCommand) -> Result<()> {
+    let request = RunRequest {
+        mode: RunMode::Modern,
+        operation: RunOperation::BenchmarkReport(BenchmarkReportRequest {
+            tests_root: command.tests_root.to_string_lossy().into_owned(),
+            working_root: command.working_root.to_string_lossy().into_owned(),
+            legacy_runner: command.legacy_runner.to_string_lossy().into_owned(),
+            iterations: command.iterations,
+            warmup_iterations: command.warmup_iterations,
+        }),
+    };
+
+    let run_result = run_modern_api(request)?;
+    let report = run_result
+        .benchmark_report()
+        .expect("benchmark command should always return benchmark report success");
+
+    print_benchmark_report(report);
+    write_benchmark_report_json(report, &command.json_output)?;
+    println!(
+        "Machine-readable benchmark report: {}",
+        command.json_output.to_string_lossy()
+    );
+
+    Ok(())
+}
+
 fn parse_command(args: &[String]) -> Result<CliCommand> {
     match args.first().map(String::as_str) {
         Some("baseline") => Ok(CliCommand::Baseline(parse_baseline_command(args)?)),
         Some("parity") => Ok(CliCommand::ParityReport(parse_parity_report_command(args)?)),
+        Some("benchmark") => Ok(CliCommand::BenchmarkReport(parse_benchmark_report_command(
+            args,
+        )?)),
         Some(other) => Err(FeffError::InvalidArgument(format!(
-            "unsupported command `{other}` (expected `baseline` or `parity report`)"
+            "unsupported command `{other}` (expected `baseline`, `parity report`, or `benchmark report`)"
         ))),
         None => Err(FeffError::InvalidArgument(
-            "missing command (expected `baseline` or `parity report`)".to_string(),
+            "missing command (expected `baseline`, `parity report`, or `benchmark report`)"
+                .to_string(),
         )),
     }
 }
@@ -410,6 +454,86 @@ fn parse_parity_report_command(args: &[String]) -> Result<ParityReportCommand> {
     })
 }
 
+fn parse_benchmark_report_command(args: &[String]) -> Result<BenchmarkReportCommand> {
+    if args.first().map(String::as_str) != Some("benchmark")
+        || args.get(1).map(String::as_str) != Some("report")
+    {
+        return Err(FeffError::InvalidArgument(
+            "benchmark command must be `benchmark report`".to_string(),
+        ));
+    }
+
+    let mut tests_root = PathBuf::from("feff85exafs/tests");
+    let mut working_root = PathBuf::from("target/benchmark-report");
+    let mut legacy_runner = PathBuf::from("feff85exafs/bin/f85e");
+    let mut iterations = 1usize;
+    let mut warmup_iterations = 0usize;
+    let mut json_output = PathBuf::from("target/benchmark-report/benchmark-report.json");
+
+    let mut idx = 2;
+    while idx < args.len() {
+        match args[idx].as_str() {
+            "--tests-root" => {
+                idx += 1;
+                let value = args
+                    .get(idx)
+                    .ok_or_else(|| missing_option_value_error("--tests-root"))?;
+                tests_root = PathBuf::from(value);
+            }
+            "--working-root" => {
+                idx += 1;
+                let value = args
+                    .get(idx)
+                    .ok_or_else(|| missing_option_value_error("--working-root"))?;
+                working_root = PathBuf::from(value);
+            }
+            "--legacy-runner" => {
+                idx += 1;
+                let value = args
+                    .get(idx)
+                    .ok_or_else(|| missing_option_value_error("--legacy-runner"))?;
+                legacy_runner = PathBuf::from(value);
+            }
+            "--iterations" => {
+                idx += 1;
+                let value = args
+                    .get(idx)
+                    .ok_or_else(|| missing_option_value_error("--iterations"))?;
+                iterations = parse_positive_usize("--iterations", value)?;
+            }
+            "--warmup-iterations" => {
+                idx += 1;
+                let value = args
+                    .get(idx)
+                    .ok_or_else(|| missing_option_value_error("--warmup-iterations"))?;
+                warmup_iterations = parse_non_negative_usize("--warmup-iterations", value)?;
+            }
+            "--json-output" => {
+                idx += 1;
+                let value = args
+                    .get(idx)
+                    .ok_or_else(|| missing_option_value_error("--json-output"))?;
+                json_output = PathBuf::from(value);
+            }
+            unknown => {
+                return Err(FeffError::InvalidArgument(format!(
+                    "unknown argument `{unknown}`"
+                )));
+            }
+        }
+        idx += 1;
+    }
+
+    Ok(BenchmarkReportCommand {
+        tests_root,
+        working_root,
+        legacy_runner,
+        iterations,
+        warmup_iterations,
+        json_output,
+    })
+}
+
 fn load_approved_regressions(command: &ParityReportCommand) -> Result<BTreeSet<String>> {
     let mut approved = command.approved_regression_ids.clone();
 
@@ -477,6 +601,60 @@ fn print_parity_report(report: &ParityReport) {
     }
 }
 
+fn print_benchmark_report(report: &BenchmarkReport) {
+    println!(
+        "Benchmark report generated for {} case(s)",
+        report.summary.case_count
+    );
+    println!(
+        "Iterations: {} measured, {} warmup",
+        report.iterations, report.warmup_iterations
+    );
+    println!("Legacy runner: {}", report.legacy_runner);
+    println!(
+        "Summary: rust_mean_total={:.3} ms legacy_mean_total={:.3} ms",
+        report.summary.rust_total_mean_ms, report.summary.legacy_total_mean_ms
+    );
+    if let (Some(ratio), Some(speedup)) = (
+        report.summary.rust_vs_legacy_ratio,
+        report.summary.speedup_percent,
+    ) {
+        println!(
+            "Summary ratio: rust/legacy={:.4} ({:+.2}% speedup)",
+            ratio, speedup
+        );
+    }
+
+    for case in &report.cases {
+        println!(
+            "  {}/{} rust_mean={:.3} ms legacy_mean={:.3} ms ratio={}",
+            case.material,
+            case.variant,
+            case.rust_stats.mean_ms,
+            case.legacy_stats.mean_ms,
+            case.rust_vs_legacy_ratio
+                .map(|value| format!("{value:.4}"))
+                .unwrap_or_else(|| "n/a".to_string())
+        );
+    }
+}
+
+fn write_benchmark_report_json(report: &BenchmarkReport, output_path: &PathBuf) -> Result<()> {
+    if let Some(parent) = output_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
+    }
+
+    let raw = serde_json::to_string_pretty(report).map_err(|error| {
+        FeffError::InvalidArgument(format!(
+            "failed to serialize benchmark report JSON: {error}"
+        ))
+    })?;
+    fs::write(output_path, format!("{raw}\n"))?;
+    Ok(())
+}
+
 fn parse_non_negative_f64(flag: &str, value: &str) -> Result<f64> {
     let parsed = value.parse::<f64>().map_err(|error| {
         FeffError::InvalidArgument(format!("failed to parse {flag} value `{value}`: {error}"))
@@ -491,6 +669,24 @@ fn parse_non_negative_f64(flag: &str, value: &str) -> Result<f64> {
     Ok(parsed)
 }
 
+fn parse_positive_usize(flag: &str, value: &str) -> Result<usize> {
+    let parsed = value.parse::<usize>().map_err(|error| {
+        FeffError::InvalidArgument(format!("failed to parse {flag} value `{value}`: {error}"))
+    })?;
+
+    if parsed == 0 {
+        return Err(FeffError::InvalidArgument(format!("{flag} must be >= 1")));
+    }
+
+    Ok(parsed)
+}
+
+fn parse_non_negative_usize(flag: &str, value: &str) -> Result<usize> {
+    value.parse::<usize>().map_err(|error| {
+        FeffError::InvalidArgument(format!("failed to parse {flag} value `{value}`: {error}"))
+    })
+}
+
 fn missing_option_value_error(flag: &str) -> FeffError {
     FeffError::InvalidArgument(format!("missing value for {flag}"))
 }
@@ -502,6 +698,9 @@ fn print_usage() {
     );
     eprintln!(
         "  cargo run -- parity report [--tests-root PATH] [--working-root PATH] [--max-abs-delta FLOAT --max-rms-delta FLOAT] [--allow-regression ID ...] [--allow-regression-file PATH ...]"
+    );
+    eprintln!(
+        "  cargo run -- benchmark report [--tests-root PATH] [--working-root PATH] [--legacy-runner PATH] [--iterations N] [--warmup-iterations N] [--json-output PATH]"
     );
     eprintln!();
     eprintln!("Variant aliases:");
@@ -516,6 +715,14 @@ fn print_usage() {
     eprintln!("Parity defaults:");
     eprintln!("  --tests-root   feff85exafs/tests");
     eprintln!("  --working-root target/parity-report");
+    eprintln!();
+    eprintln!("Benchmark defaults:");
+    eprintln!("  --tests-root         feff85exafs/tests");
+    eprintln!("  --working-root       target/benchmark-report");
+    eprintln!("  --legacy-runner      feff85exafs/bin/f85e");
+    eprintln!("  --iterations         1");
+    eprintln!("  --warmup-iterations  0");
+    eprintln!("  --json-output        target/benchmark-report/benchmark-report.json");
 }
 
 #[cfg(test)]
@@ -655,6 +862,69 @@ mod tests {
                 "docs/migration/parity-approved-regressions.txt"
             )]
         );
+    }
+
+    #[test]
+    fn parse_benchmark_report_command_uses_expected_defaults() {
+        let command = parse_benchmark_report_command(&args(&["benchmark", "report"]))
+            .expect("benchmark report args should parse");
+        assert_eq!(command.tests_root, PathBuf::from("feff85exafs/tests"));
+        assert_eq!(
+            command.working_root,
+            PathBuf::from("target/benchmark-report")
+        );
+        assert_eq!(command.legacy_runner, PathBuf::from("feff85exafs/bin/f85e"));
+        assert_eq!(command.iterations, 1);
+        assert_eq!(command.warmup_iterations, 0);
+        assert_eq!(
+            command.json_output,
+            PathBuf::from("target/benchmark-report/benchmark-report.json")
+        );
+    }
+
+    #[test]
+    fn parse_benchmark_report_command_accepts_custom_values() {
+        let command = parse_benchmark_report_command(&args(&[
+            "benchmark",
+            "report",
+            "--tests-root",
+            "tests/custom",
+            "--working-root",
+            "target/bench",
+            "--legacy-runner",
+            "/tmp/f85e",
+            "--iterations",
+            "5",
+            "--warmup-iterations",
+            "2",
+            "--json-output",
+            "target/bench/report.json",
+        ]))
+        .expect("benchmark report args should parse");
+
+        assert_eq!(command.tests_root, PathBuf::from("tests/custom"));
+        assert_eq!(command.working_root, PathBuf::from("target/bench"));
+        assert_eq!(command.legacy_runner, PathBuf::from("/tmp/f85e"));
+        assert_eq!(command.iterations, 5);
+        assert_eq!(command.warmup_iterations, 2);
+        assert_eq!(
+            command.json_output,
+            PathBuf::from("target/bench/report.json")
+        );
+    }
+
+    #[test]
+    fn parse_benchmark_report_command_rejects_zero_iterations() {
+        let err =
+            parse_benchmark_report_command(&args(&["benchmark", "report", "--iterations", "0"]))
+                .expect_err("zero iterations should fail parsing");
+
+        match err {
+            FeffError::InvalidArgument(message) => {
+                assert!(message.contains("--iterations must be >= 1"));
+            }
+            other => panic!("unexpected error type: {other}"),
+        }
     }
 
     #[test]

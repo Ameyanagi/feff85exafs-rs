@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::baseline::{generate_noscf_manifests_for_mode, generate_withscf_manifests_for_mode};
+use crate::benchmark::{BenchmarkReport, BenchmarkReportRequest, generate_benchmark_report};
 use crate::domain::RunMode;
 use crate::parity::{ParityReport, ParityReportRequest, generate_parity_report};
 use feff85exafs_errors::{FeffError, Result, ValidationErrors};
@@ -27,6 +28,7 @@ pub struct BaselineRunRequest {
 pub enum RunOperation {
     Baseline(BaselineRunRequest),
     ParityReport(ParityReportRequest),
+    BenchmarkReport(BenchmarkReportRequest),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -56,6 +58,7 @@ pub struct BaselineRunSuccess {
 pub enum RunOperationSuccess {
     Baseline(BaselineRunSuccess),
     ParityReport(ParityReport),
+    BenchmarkReport(BenchmarkReport),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -72,20 +75,31 @@ impl RunSuccess {
     pub fn parity_report(&self) -> Option<&ParityReport> {
         self.result.parity_report()
     }
+
+    pub fn benchmark_report(&self) -> Option<&BenchmarkReport> {
+        self.result.benchmark_report()
+    }
 }
 
 impl RunOperationSuccess {
     pub fn baseline(&self) -> Option<&BaselineRunSuccess> {
         match self {
             Self::Baseline(result) => Some(result),
-            Self::ParityReport(_) => None,
+            Self::ParityReport(_) | Self::BenchmarkReport(_) => None,
         }
     }
 
     pub fn parity_report(&self) -> Option<&ParityReport> {
         match self {
             Self::ParityReport(result) => Some(result),
-            Self::Baseline(_) => None,
+            Self::Baseline(_) | Self::BenchmarkReport(_) => None,
+        }
+    }
+
+    pub fn benchmark_report(&self) -> Option<&BenchmarkReport> {
+        match self {
+            Self::BenchmarkReport(result) => Some(result),
+            Self::Baseline(_) | Self::ParityReport(_) => None,
         }
     }
 }
@@ -123,6 +137,26 @@ impl RunRequest {
                     "operation.parity_report.working_root",
                     &mut errors,
                 );
+            }
+            RunOperation::BenchmarkReport(operation) => {
+                validate_non_empty(
+                    &operation.tests_root,
+                    "operation.benchmark_report.tests_root",
+                    &mut errors,
+                );
+                validate_non_empty(
+                    &operation.working_root,
+                    "operation.benchmark_report.working_root",
+                    &mut errors,
+                );
+                validate_non_empty(
+                    &operation.legacy_runner,
+                    "operation.benchmark_report.legacy_runner",
+                    &mut errors,
+                );
+                if operation.iterations == 0 {
+                    errors.push("operation.benchmark_report.iterations", "must be >= 1");
+                }
             }
         }
 
@@ -206,6 +240,9 @@ fn execute(request: RunRequest) -> Result<RunSuccess> {
         RunOperation::ParityReport(operation) => {
             RunOperationSuccess::ParityReport(run_parity_report_operation(&operation)?)
         }
+        RunOperation::BenchmarkReport(operation) => {
+            RunOperationSuccess::BenchmarkReport(run_benchmark_report_operation(&operation)?)
+        }
     };
 
     Ok(RunSuccess {
@@ -270,6 +307,10 @@ fn run_baseline_operation(
 
 fn run_parity_report_operation(operation: &ParityReportRequest) -> Result<ParityReport> {
     generate_parity_report(operation)
+}
+
+fn run_benchmark_report_operation(operation: &BenchmarkReportRequest) -> Result<BenchmarkReport> {
+    generate_benchmark_report(operation)
 }
 
 fn validate_non_empty(value: &str, field: &str, errors: &mut ValidationErrors) {
@@ -483,6 +524,36 @@ mod tests {
                     .collect::<Vec<_>>();
                 assert!(fields.contains(&"operation.parity_report.tests_root"));
                 assert!(fields.contains(&"operation.parity_report.working_root"));
+            }
+            other => panic!("unexpected error type: {other}"),
+        }
+    }
+
+    #[test]
+    fn run_returns_validation_error_for_blank_benchmark_request_fields() {
+        let err = run(RunRequest {
+            mode: RunMode::Modern,
+            operation: RunOperation::BenchmarkReport(BenchmarkReportRequest {
+                tests_root: " ".to_string(),
+                working_root: "".to_string(),
+                legacy_runner: "\n".to_string(),
+                iterations: 0,
+                warmup_iterations: 0,
+            }),
+        })
+        .expect_err("blank benchmark request fields should fail validation");
+
+        match err {
+            FeffError::Validation(validation) => {
+                let fields = validation
+                    .issues()
+                    .iter()
+                    .map(|issue| issue.field.as_str())
+                    .collect::<Vec<_>>();
+                assert!(fields.contains(&"operation.benchmark_report.tests_root"));
+                assert!(fields.contains(&"operation.benchmark_report.working_root"));
+                assert!(fields.contains(&"operation.benchmark_report.legacy_runner"));
+                assert!(fields.contains(&"operation.benchmark_report.iterations"));
             }
             other => panic!("unexpected error type: {other}"),
         }

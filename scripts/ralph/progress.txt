@@ -22,6 +22,7 @@
 - FF2X parity should resample Rust `feffNNNN.dat` k-grids to legacy `0.05` spacing before comparing `chi.dat`/`xmu.dat` signatures against baseline fixtures.
 - Test temp directories should include an atomic suffix in addition to timestamp/PID to avoid collisions when `cargo test --workspace` runs tests in parallel.
 - Parity regression gating should use `cargo run -- parity report` with paired thresholds (`--max-abs-delta` + `--max-rms-delta`) and optional allowlists keyed by `<material>/<variant>/<file>` IDs.
+- Benchmark runs should isolate each case/iteration into a dedicated working directory before execution so stale stage artifacts do not skew timing or legacy-vs-modern comparisons.
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -265,4 +266,17 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - Regression gate semantics are only enabled when both thresholds are set; setting one threshold without the other is rejected to prevent ambiguous CI behavior.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Current corpus-wide parity deltas are dominated by `xmu.dat` for heavy-element fixtures (`UO2`, `Zircon`), so CI thresholds should be tuned with those fixtures in mind.
+---
+## 2026-02-16 06:00:33 JST - US-020
+- Added a typed benchmark harness in `feff85exafs-core` (`benchmark::generate_benchmark_report`) that discovers the core corpus, runs modern Rust and legacy `f85e` executions per case, and records per-iteration timing samples plus aggregate comparison metrics.
+- Extended API/CLI support with a new `benchmark report` operation (`cargo run -- benchmark report`) and machine-readable JSON output (`--json-output`, default `target/benchmark-report/benchmark-report.json`) for CI trend tracking.
+- Added benchmark documentation and CI wrapper script (`docs/migration/benchmark-report.md`, `scripts/ci/benchmark-report.sh`) plus benchmark-specific unit coverage (including a Unix fake-legacy-runner smoke path) and request/CLI parsing tests.
+- Files changed: `Cargo.toml`, `crates/feff85exafs-core/src/lib.rs`, `crates/feff85exafs-core/src/benchmark.rs`, `crates/feff85exafs-core/src/api.rs`, `src/main.rs`, `docs/migration/benchmark-report.md`, `scripts/ci/benchmark-report.sh`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - New report-style automation should follow the existing typed API pattern (`RunOperation` variant + CLI adapter) so command behavior stays consistent between library and CLI entrypoints.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - The benchmark CLI needs `serde_json` in the root crate dependencies; even if the core crate already depends on it, the binary crate must declare it when serializing reports.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Benchmark defaults are intentionally lightweight (`iterations=1`, `warmup=0`); CI can raise them via `BENCHMARK_ITERATIONS` / `BENCHMARK_WARMUP_ITERATIONS` in `scripts/ci/benchmark-report.sh`.
 ---
