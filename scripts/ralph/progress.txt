@@ -28,6 +28,7 @@
 - Parity regression gating should use `cargo run -- parity report` with paired thresholds (`--max-abs-delta` + `--max-rms-delta`) and optional allowlists keyed by `<material>/<variant>/<file>` IDs.
 - Benchmark runs should isolate each case/iteration into a dedicated working directory before execution so stale stage artifacts do not skew timing or legacy-vs-modern comparisons.
 - Keep end-to-end stage wiring centralized in `crates/feff85exafs-core/src/workflow.rs`; CLI/API/report flows should call shared workflow runners instead of duplicating stage orchestration code.
+- Treat `workflow run --mode legacy` as a compatibility-only surface: it requires a legacy runner and returns only `chi.dat`/`xmu.dat`, while modern mode returns additional non-core artifacts (`sig2.dat`, `exchange.dat`, `fovrg.dat`).
 
 Started: Mon Feb 16 03:58:44 JST 2026
 ---
@@ -349,4 +350,16 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - Legacy workflow mode should validate `legacy_runner` at request-validation time; relying only on runtime command errors makes API behavior inconsistent.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Modern workflow runs now emit non-core artifacts (`sig2.dat`, `exchange.dat`, `fovrg.dat`) in addition to core outputs (`chi.dat`, `xmu.dat`) under the selected working root.
+---
+## 2026-02-16 06:40:37 JST - US-026
+- Published `docs/migration/legacy-to-modern.md` with a direct mapping from legacy entrypoints (`f85e`, `feff8l.sh`, `feff8l.py`) to modern CLI/API usage, including command and typed request examples.
+- Documented compatibility mode behavior, known legacy-vs-modern differences, and recommended migration defaults for integrators.
+- Files changed: `docs/migration/legacy-to-modern.md`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Migration docs should anchor behavior claims to `workflow.rs` + `api.rs` contracts (not legacy wrapper behavior), because CLI output fields differ by mode (`legacy` vs `modern`).
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - `workflow run` intentionally does not mirror `feff8l.py` per-module skip flags; migration docs need to call out unsupported wrapper options explicitly to avoid false equivalence.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - The core API supports both in-memory and file-based request submission, so most legacy script orchestration can migrate directly to `api::run(...)` / `api::run_from_file(...)` without shell wrappers.
 ---
