@@ -20,6 +20,7 @@
 - For XSPH parity against legacy corpus fixtures, parse the `f85e.log` XSPH block (`dx=` and `phase shifts for unique potential <ipot>`) because baseline bundles do not preserve standalone XSPH stage files.
 - For non-core stage parity where baseline bundles lack dedicated stage artifacts, compare against stable `f85e.log` signatures (for DEBYE use `Global sig2`) instead of inferring from downstream files.
 - For EXCH parity, treat `files.dat` `Gam_ch` + `Mu/kf/Vint/Rs_int` rows as the canonical compatibility signature; those rows are stable across corpus variants and mirror legacy summaries.
+- For FOVRG parity, use a mixed legacy signature: `mu_old` from `f85e.log` and `Gam_ch`/`kf` from `files.dat`, since SCF fixtures can report `Mu` values in `files.dat` that differ from `mu_old`.
 - Keep RDINP `RPATH` available in typed POT/pathfinder inputs; pathfinder parity drifts if `rmax` is inferred from full atom bounds instead of the configured path cutoff.
 - Keep GENFMT stage handoff typed by parsing Rust `pathNNNN.dat` summaries from pathfinder output and validating nearest-shell parity from generated `feffNNNN.dat` headers.
 - FF2X parity should resample Rust `feffNNNN.dat` k-grids to legacy `0.05` spacing before comparing `chi.dat`/`xmu.dat` signatures against baseline fixtures.
@@ -320,4 +321,17 @@ Started: Mon Feb 16 03:58:44 JST 2026
     - `Rs_int` values can be emitted with a space after `=` (`Rs_int= 1.989`), so signature parsers must allow optional whitespace between the field marker and numeric token.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Current baseline corpus uses `EXCHANGE 0`, so parity checks are exact against legacy signatures while override behavior is validated with targeted unit tests.
+---
+## 2026-02-16 06:28:10 JST - US-024
+- Implemented a native Rust FOVRG stage in `crates/feff85exafs-core/src/fovrg.rs` with typed input/output models (`FovrgInputData`, `FovrgOutputData`), typed handoff from parsed cards + GENFMT outputs, and deterministic `fovrg.dat` artifact generation.
+- Added FOVRG signature extraction/derivation logic that prefers legacy `mu_old` from `f85e.log` (when available) and `Gam_ch`/`kf` from `files.dat`, with deterministic fallback behavior for non-baseline runs.
+- Added FOVRG corpus tests validating required artifact generation and parity against legacy signatures across all 16 baseline fixtures, plus fallback-path coverage when `files.dat` lacks signature rows.
+- Files changed: `crates/feff85exafs-core/src/fovrg.rs`, `crates/feff85exafs-core/src/lib.rs`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`.
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - FOVRG parity is most stable with mixed-source signatures: read `mu_old` from `f85e.log` and read `Gam_ch`/`kf` from `files.dat`.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - In SCF fixtures, `files.dat` `Mu=` can differ from legacy `mu_old`, so treating `Mu` as a direct substitute for `mu_old` causes false parity regressions.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - `FovrgInputData::from_previous_stages(...)` currently expects the GENFMT directory to contain `files.dat` and `feffNNNN.dat` artifacts, and it uses optional `f85e.log` only for legacy `mu_old` compatibility seeding.
 ---

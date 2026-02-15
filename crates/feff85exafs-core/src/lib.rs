@@ -5,6 +5,7 @@ pub mod debye;
 pub mod domain;
 pub mod exch;
 pub mod ff2x;
+pub mod fovrg;
 pub mod genfmt;
 pub mod legacy;
 pub mod mode;
